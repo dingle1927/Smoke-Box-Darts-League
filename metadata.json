@@ -1,0 +1,7 @@
+{
+  "name": "The Smoke Box Darts League",
+  "description": "Modern responsive darts league app with 301 double-out rules, dynamic availability fixture generator, live standings, stats leaderboards, and admin score entry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
