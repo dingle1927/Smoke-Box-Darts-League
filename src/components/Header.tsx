@@ -117,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
               />
               <Cloud className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               <span className="hidden sm:inline text-neutral-300">
-                {syncStatus === 'syncing' ? 'Syncing...' : 'Cloud DB'}
+                {syncStatus === 'syncing' ? 'Syncing...' : 'Supabase'}
               </span>
               <RefreshCw className={`w-3 h-3 text-neutral-400 hover:text-white ml-0.5 ${syncStatus === 'syncing' ? 'animate-spin text-blue-400' : ''}`} />
             </button>

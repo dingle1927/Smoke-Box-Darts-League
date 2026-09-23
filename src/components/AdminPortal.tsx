@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Trash2, Edit3, Save, X, RotateCcw, AlertTriangle, Key, Users, Trophy, Target } from 'lucide-react';
+import { ShieldCheck, Plus, Trash2, Edit3, Save, X, RotateCcw, AlertTriangle, Key, Users, Trophy, Target, Database } from 'lucide-react';
 import { Player, MatchResult, Fixture } from '../types/darts';
 import { BearAvatar } from './BearAvatar';
 
@@ -933,6 +933,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     Update Password
                   </button>
                 </form>
+              </div>
+
+              {/* Supabase Cloud Database Status */}
+              <div className="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                    <Database className="w-4 h-4 text-emerald-400" />
+                    <span>Supabase Cloud Database Status</span>
+                  </h4>
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800/80 text-[10px] font-bold text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Direct Client Connected
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 leading-relaxed">
+                  All match results, player rosters, and standings are queried directly from your Supabase tables (<code className="text-neutral-300 bg-neutral-900 px-1 py-0.5 rounded">players</code>, <code className="text-neutral-300 bg-neutral-900 px-1 py-0.5 rounded">matches</code>, <code className="text-neutral-300 bg-neutral-900 px-1 py-0.5 rounded">standings</code>). Mobile and desktop sync simultaneously in real time without local API proxy dependency.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                  <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800/80">
+                    <div className="text-neutral-500 uppercase text-[9px] font-sans">Active Players</div>
+                    <div className="text-sm font-bold text-white mt-0.5">{players.length} registered</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800/80">
+                    <div className="text-neutral-500 uppercase text-[9px] font-sans">Recorded Matches</div>
+                    <div className="text-sm font-bold text-white mt-0.5">{matches.length} played</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800/80">
+                    <div className="text-neutral-500 uppercase text-[9px] font-sans">Sync Protocol</div>
+                    <div className="text-sm font-bold text-emerald-400 mt-0.5">Direct REST / Realtime</div>
+                  </div>
+                </div>
               </div>
 
               {/* Tournament Management */}

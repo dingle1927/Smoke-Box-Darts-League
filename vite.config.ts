@@ -11,6 +11,14 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    define: {
+      'process.env.SUPABASE_URL': JSON.stringify(
+        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://tnvrsfezqkrfnhorarkb.supabase.co'
+      ),
+      'process.env.SUPABASE_ANON_KEY': JSON.stringify(
+        process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRudnJzZmV6cWtyZm5ob3JhcmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNjcxNjIsImV4cCI6MjEwNTc0MzE2Mn0.niPqQxtMYGsQYd0-zjVIyHyld4hILJu9hWsIT48EW_Y'
+      ),
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

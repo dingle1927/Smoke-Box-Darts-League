@@ -21,6 +21,7 @@ import {
   remoteResetDemo,
   remoteClearMatches,
   remoteUpdatePin,
+  subscribeToLeagueChanges,
 } from './utils/cloudSync';
 import { calculatePlayerStats } from './utils/statsCalculator';
 import { Header } from './components/Header';
@@ -93,13 +94,17 @@ export default function App() {
     }
   }, []);
 
-  // Poll cloud database every 3 seconds & immediately on window focus/visibility change
+  // Poll cloud database every 4 seconds, immediately on window focus, and on Supabase Realtime changes
   useEffect(() => {
     syncWithRemote(true);
 
+    const unsubscribeRealtime = subscribeToLeagueChanges(() => {
+      syncWithRemote(false);
+    });
+
     const interval = setInterval(() => {
       syncWithRemote(false);
-    }, 3000);
+    }, 4000);
 
     const onFocusOrVisible = () => {
       syncWithRemote(false);
@@ -116,6 +121,7 @@ export default function App() {
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
+      unsubscribeRealtime();
       clearInterval(interval);
       window.removeEventListener('focus', onFocusOrVisible);
       window.removeEventListener('online', onFocusOrVisible);
