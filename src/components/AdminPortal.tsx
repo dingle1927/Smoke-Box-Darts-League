@@ -173,8 +173,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const handleAddPlayer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlayerName.trim()) return;
-    if (players.length >= 15) {
-      setFormError('Maximum 15 players allowed for this league.');
+    if (players.length >= 30) {
+      setFormError('Maximum 30 players allowed for this league.');
       setTimeout(() => setFormError(null), 3500);
       return;
     }
@@ -272,7 +272,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {[
             { id: 'score', label: editingMatch ? 'Edit Match Score' : 'Record Score', icon: Target },
             { id: 'history', label: `Match History & Undo (${matches.length})`, icon: RotateCcw },
-            { id: 'players', label: `Roster (${players.length}/15)`, icon: Users },
+            { id: 'players', label: `Roster (${players.length}/30)`, icon: Users },
             { id: 'settings', label: 'League Settings', icon: Key },
           ].map(tab => {
             const Icon = tab.icon;
@@ -723,7 +723,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <form onSubmit={handleAddPlayer} className="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
                   <Plus className="w-4 h-4 text-emerald-400" />
-                  <span>Add League Player (10 to 15 Players)</span>
+                  <span>Add League Player (Up to 30 Players)</span>
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -775,7 +775,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    disabled={players.length >= 15}
+                    disabled={players.length >= 30}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" />
@@ -787,7 +787,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               {/* Player list */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                  Current League Players ({players.length}/15):
+                  Current League Players ({players.length}/30):
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {players.map(p => (
