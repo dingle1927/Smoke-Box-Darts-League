@@ -10,6 +10,7 @@ interface AdminPortalProps {
   onSaveMatchResult: (match: MatchResult) => void;
   onDeleteMatchResult: (matchId: string) => void;
   onUpdatePlayers: (players: Player[]) => void;
+  onDeletePlayer?: (playerId: string) => void;
   onResetData: () => void;
   onClearMatches: () => void;
   onClose: () => void;
@@ -27,6 +28,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onSaveMatchResult,
   onDeleteMatchResult,
   onUpdatePlayers,
+  onDeletePlayer,
   onResetData,
   onClearMatches,
   onClose,
@@ -70,6 +72,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerNickname, setNewPlayerNickname] = useState('');
   const [newPlayerBearType, setNewPlayerBearType] = useState<'grizzly' | 'smoky' | 'polar' | 'kodiak' | 'bruin'>('grizzly');
+  const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
 
   // PIN settings state
   const [newPin, setNewPin] = useState('');
@@ -171,7 +174,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     e.preventDefault();
     if (!newPlayerName.trim()) return;
     if (players.length >= 15) {
-      alert('Maximum 15 players allowed for this league.');
+      setFormError('Maximum 15 players allowed for this league.');
+      setTimeout(() => setFormError(null), 3500);
       return;
     }
 
@@ -187,13 +191,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     onUpdatePlayers([...players, newP]);
     setNewPlayerName('');
     setNewPlayerNickname('');
-    alert(`Player "${newP.name}" added to the league!`);
+    setSuccessMsg(`Player "${newP.name}" added to the league!`);
+    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
   // Toggle active player
   const handleTogglePlayerActive = (id: string) => {
     const updated = players.map(p => (p.id === id ? { ...p, active: !p.active } : p));
     onUpdatePlayers(updated);
+  };
+
+  // Confirm delete player
+  const handleConfirmDeletePlayer = (p: Player) => {
+    if (onDeletePlayer) {
+      onDeletePlayer(p.id);
+    } else {
+      // Fallback: update player roster and cascade delete related matches
+      onUpdatePlayers(players.filter(pl => pl.id !== p.id));
+      const relatedMatches = matches.filter(m => m.player1Id === p.id || m.player2Id === p.id);
+      relatedMatches.forEach(m => onDeleteMatchResult(m.id));
+    }
+
+    // Reset player selection in form if it matched the deleted player
+    const remaining = players.filter(pl => pl.id !== p.id);
+    if (player1Id === p.id) {
+      setPlayer1Id(remaining[0]?.id || '');
+    }
+    if (player2Id === p.id) {
+      setPlayer2Id(remaining[1]?.id || remaining[0]?.id || '');
+    }
+
+    setSuccessMsg(`Player "${p.name}" has been removed from the roster.`);
+    setTimeout(() => setSuccessMsg(null), 3500);
+    setPlayerToDelete(null);
   };
 
   const handleUpdatePinSubmit = (e: React.FormEvent) => {
@@ -777,13 +807,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleTogglePlayerActive(p.id)}
-                          className={`px-2 py-1 rounded text-[11px] font-bold ${
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
                             p.active
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : 'bg-neutral-800 text-neutral-500'
+                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'
+                              : 'bg-neutral-800 text-neutral-500 border border-neutral-700'
                           }`}
                         >
                           {p.active ? 'Active' : 'Inactive'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlayerToDelete(p)}
+                          title={`Delete ${p.name} from roster`}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 hover:text-red-100 text-[11px] font-bold border border-red-800 transition-colors shadow-sm"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                          <span>Delete</span>
                         </button>
                       </div>
                     </div>
@@ -863,6 +902,101 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Delete Player Confirmation Prompt Modal */}
+      {playerToDelete && (
+        <div className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-neutral-900 border-2 border-red-700/80 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 relative">
+            <div className="flex items-start gap-3">
+              <div className="p-3 rounded-xl bg-red-950 text-red-400 border border-red-800 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-black text-white uppercase tracking-wider">
+                  Remove Player From Roster?
+                </h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Please review the details below before removing this player.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlayerToDelete(null)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Player Card */}
+            <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center gap-3">
+              <BearAvatar player={playerToDelete} size="md" />
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm text-white truncate">{playerToDelete.name}</div>
+                <div className="text-xs text-red-400 font-medium">"{playerToDelete.nickname}"</div>
+                <div className="text-[11px] text-neutral-400 mt-1">
+                  Status: <span className={playerToDelete.active ? 'text-emerald-400 font-semibold' : 'text-neutral-400'}>{playerToDelete.active ? 'Active Player' : 'Inactive Player'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Impact Analysis Warning */}
+            {(() => {
+              const affectedMatches = matches.filter(
+                m => m.player1Id === playerToDelete.id || m.player2Id === playerToDelete.id
+              );
+              return (
+                <div className={`p-3 rounded-xl text-xs space-y-1.5 ${
+                  affectedMatches.length > 0
+                    ? 'bg-amber-950/40 border border-amber-800/70 text-amber-200'
+                    : 'bg-neutral-950 border border-neutral-800 text-neutral-300'
+                }`}>
+                  {affectedMatches.length > 0 ? (
+                    <>
+                      <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Warning: {affectedMatches.length} Recorded Match(es) Found</span>
+                      </div>
+                      <p className="text-neutral-300 text-[11px] leading-relaxed">
+                        Removing <strong>{playerToDelete.name}</strong> will also erase their {affectedMatches.length} recorded match results and automatically recalculate the standings and leaderboard statistics.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-neutral-400 text-xs leading-relaxed">
+                      This player has no recorded matches. They will be removed immediately from the roster and excluded from fixture generation.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {players.length <= 2 && (
+              <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
+                Caution: The league currently only has {players.length} players. Removing another player will leave fewer than 2 players.
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPlayerToDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDeletePlayer(playerToDelete)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Yes, Remove Player</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 

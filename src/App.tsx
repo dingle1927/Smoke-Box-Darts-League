@@ -81,6 +81,15 @@ export default function App() {
     setMatches(prev => prev.filter(m => m.id !== matchId));
   };
 
+  const handleDeletePlayer = (playerId: string) => {
+    setPlayers(prev => prev.filter(p => p.id !== playerId));
+    // Also remove matches played by this deleted player to keep standings clean
+    setMatches(prev => prev.filter(m => m.player1Id !== playerId && m.player2Id !== playerId));
+    if (selectedPlayerId === playerId) {
+      setSelectedPlayerId(null);
+    }
+  };
+
   const handleResetDemoData = () => {
     const demo = resetToDemoData();
     setPlayers(demo.players);
@@ -279,6 +288,7 @@ export default function App() {
           onSaveMatchResult={handleSaveMatchResult}
           onDeleteMatchResult={handleDeleteMatchResult}
           onUpdatePlayers={setPlayers}
+          onDeletePlayer={handleDeletePlayer}
           onResetData={handleResetDemoData}
           onClearMatches={handleClearMatches}
           onClose={() => {
