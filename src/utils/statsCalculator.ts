@@ -7,6 +7,7 @@ export function calculatePlayerStats(players: Player[], matches: MatchResult[]):
   const statsMap = new Map<string, {
     played: number;
     won: number;
+    drawn: number;
     lost: number;
     legsFor: number;
     legsAgainst: number;
@@ -22,6 +23,7 @@ export function calculatePlayerStats(players: Player[], matches: MatchResult[]):
     statsMap.set(p.id, {
       played: 0,
       won: 0,
+      drawn: 0,
       lost: 0,
       legsFor: 0,
       legsAgainst: 0,
@@ -42,6 +44,9 @@ export function calculatePlayerStats(players: Player[], matches: MatchResult[]):
   sortedMatches.forEach(m => {
     const isP1Active = statsMap.has(m.player1Id);
     const isP2Active = statsMap.has(m.player2Id);
+    const isDraw = m.player1Legs === m.player2Legs;
+    const isP1Winner = !isDraw && (m.winnerId === m.player1Id || m.player1Legs > m.player2Legs);
+    const isP2Winner = !isDraw && (m.winnerId === m.player2Id || m.player2Legs > m.player1Legs);
 
     if (isP1Active) {
       const s1 = statsMap.get(m.player1Id)!;
@@ -54,11 +59,14 @@ export function calculatePlayerStats(players: Player[], matches: MatchResult[]):
         s1.matchAverages.push({ avg: m.player1Avg, legs: m.player1Legs + m.player2Legs });
         s1.highestAverage = Math.max(s1.highestAverage, m.player1Avg);
       }
-      if (m.winnerId === m.player1Id) {
+      if (isDraw) {
+        s1.drawn += 1;
+        s1.points += 1; // 1 point for draw (2-2)
+      } else if (isP1Winner) {
         s1.won += 1;
-        s1.points += 3;
+        s1.points += 3; // 3 points for win
       } else {
-        s1.lost += 1;
+        s1.lost += 1; // 0 points for loss
       }
       s1.matches.push(m);
     }
@@ -74,11 +82,14 @@ export function calculatePlayerStats(players: Player[], matches: MatchResult[]):
         s2.matchAverages.push({ avg: m.player2Avg, legs: m.player1Legs + m.player2Legs });
         s2.highestAverage = Math.max(s2.highestAverage, m.player2Avg);
       }
-      if (m.winnerId === m.player2Id) {
+      if (isDraw) {
+        s2.drawn += 1;
+        s2.points += 1; // 1 point for draw (2-2)
+      } else if (isP2Winner) {
         s2.won += 1;
-        s2.points += 3;
+        s2.points += 3; // 3 points for win
       } else {
-        s2.lost += 1;
+        s2.lost += 1; // 0 points for loss
       }
       s2.matches.push(m);
     }
@@ -102,14 +113,19 @@ export function calculatePlayerStats(players: Player[], matches: MatchResult[]):
       }
     }
 
-    // Last 5 matches for form
-    const form: ('W' | 'L')[] = s.matches.slice(-5).map(m => (m.winnerId === player.id ? 'W' : 'L'));
+    // Last 5 matches for form ('W' | 'D' | 'L')
+    const form: ('W' | 'D' | 'L')[] = s.matches.slice(-5).map(m => {
+      if (m.player1Legs === m.player2Legs) return 'D';
+      const isWinner = m.winnerId === player.id || (m.player1Id === player.id ? m.player1Legs > m.player2Legs : m.player2Legs > m.player1Legs);
+      return isWinner ? 'W' : 'L';
+    });
 
     return {
       rank: 0,
       player,
       played: s.played,
       won: s.won,
+      drawn: s.drawn,
       lost: s.lost,
       legsFor: s.legsFor,
       legsAgainst: s.legsAgainst,
@@ -246,6 +262,7 @@ export function getHeadToHeadRecords(
     );
 
     let wins = 0;
+    let draws = 0;
     let losses = 0;
     let legsFor = 0;
     let legsAgainst = 0;
@@ -257,7 +274,9 @@ export function getHeadToHeadRecords(
       legsFor += myLegs;
       legsAgainst += oppLegs;
 
-      if (m.winnerId === playerId) {
+      if (myLegs === oppLegs) {
+        draws += 1;
+      } else if (myLegs > oppLegs) {
         wins += 1;
       } else {
         losses += 1;
@@ -271,6 +290,7 @@ export function getHeadToHeadRecords(
       opponent,
       played: directMatches.length,
       wins,
+      draws,
       losses,
       legsFor,
       legsAgainst,

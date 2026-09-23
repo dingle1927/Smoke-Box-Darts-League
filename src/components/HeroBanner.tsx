@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarCheck, Shield, Target, Award, ArrowRight } from 'lucide-react';
+import { CalendarCheck, Shield, Target, Award, ArrowRight, BookOpen } from 'lucide-react';
 import { ASSETS } from '../utils/assets';
 import { PlayerStats, MatchResult } from '../types/darts';
 
@@ -7,6 +7,7 @@ interface HeroBannerProps {
   onGoToGenerator: () => void;
   onGoToScorer: () => void;
   onGoToAdmin: () => void;
+  onGoToRules?: () => void;
   totalPlayers: number;
   completedMatchesCount: number;
   totalFixturesCount: number;
@@ -18,6 +19,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onGoToGenerator,
   onGoToScorer,
   onGoToAdmin,
+  onGoToRules,
   totalPlayers,
   completedMatchesCount,
   totalFixturesCount,
@@ -57,9 +59,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             <span aria-hidden="true">·</span>
             <span>301 Double Out</span>
             <span aria-hidden="true">·</span>
-            <span>Best of 5 Legs</span>
+            <span className="text-white font-bold">Fixed 4 Legs</span>
             <span aria-hidden="true">·</span>
-            <span className="text-blue-400">3 Pts Win / 0 Loss</span>
+            <span className="text-amber-400 font-bold">3 Pts Win / 1 Pt Draw</span>
           </div>
 
           {/* Main Title */}
@@ -70,7 +72,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
           {/* Description */}
           <p className="text-neutral-300 text-sm sm:text-base max-w-2xl leading-relaxed mb-6">
             Welcome to the home of high checkouts, 180s, and intense head-to-head 301 battles. 
-            Generate session fixtures on the fly when players arrive, record live scores, and track the official championship leaderboard.
+            All matches are fixed at 4 legs (3 pts for win, 1 pt for 2-2 draw). Generate session fixtures, record live scores, and track the official championship leaderboard.
           </p>
 
           {/* Call to Actions */}
@@ -91,6 +93,16 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <Target className="w-4 h-4 text-blue-400" />
               <span>301 Live Scorer</span>
             </button>
+
+            {onGoToRules && (
+              <button
+                onClick={onGoToRules}
+                className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 text-amber-300 hover:text-white font-semibold text-sm border border-amber-900/40 hover:border-amber-700 transition-all"
+              >
+                <BookOpen className="w-4 h-4 text-amber-400" />
+                <span>Rules & Scoring</span>
+              </button>
+            )}
 
             <button
               onClick={onGoToAdmin}

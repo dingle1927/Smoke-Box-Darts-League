@@ -114,7 +114,7 @@ export const Live301Scorer: React.FC<Live301ScorerProps> = ({ players, onComplet
         const newLegs = legsP1 + 1;
         setLegsP1(newLegs);
 
-        if (newLegs === 3) {
+        if (newLegs + legsP2 === 4) {
           setIsMatchOver(true);
         } else {
           resetLeg();
@@ -127,7 +127,7 @@ export const Live301Scorer: React.FC<Live301ScorerProps> = ({ players, onComplet
         const newLegs = legsP2 + 1;
         setLegsP2(newLegs);
 
-        if (newLegs === 3) {
+        if (newLegs + legsP1 === 4) {
           setIsMatchOver(true);
         } else {
           resetLeg();
@@ -170,13 +170,18 @@ export const Live301Scorer: React.FC<Live301ScorerProps> = ({ players, onComplet
 
   const handleFinishMatch = () => {
     if (!p1 || !p2) return;
+    const isDraw = legsP1 === 2 && legsP2 === 2;
+    const winnerId = isDraw ? null : (legsP1 > legsP2 ? p1.id : p2.id);
+    const loserId = isDraw ? null : (legsP1 > legsP2 ? p2.id : p1.id);
+
     onCompleteMatch({
       player1Id: p1.id,
       player2Id: p2.id,
       player1Legs: legsP1,
       player2Legs: legsP2,
-      winnerId: legsP1 === 3 ? p1.id : p2.id,
-      loserId: legsP1 === 3 ? p2.id : p1.id,
+      winnerId,
+      loserId,
+      isDraw,
       player1Avg: p1Avg,
       player2Avg: p2Avg,
       player1180s: p1180s,
@@ -255,16 +260,34 @@ export const Live301Scorer: React.FC<Live301ScorerProps> = ({ players, onComplet
         </div>
       </div>
 
-      {/* Match Victor Notice */}
+      {/* Match Victor / Draw Notice */}
       {isMatchOver && (
         <div className="p-6 rounded-2xl bg-gradient-to-r from-red-950/90 via-neutral-900 to-blue-950/90 border-2 border-red-500 text-center space-y-3 shadow-2xl animate-in fade-in">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white text-xs font-black uppercase tracking-widest">
             <Award className="w-4 h-4" />
-            <span>Match Concluded! (Best of 5)</span>
+            <span>Match Concluded! (Fixed 4 Legs)</span>
           </div>
-          <h3 className="text-2xl sm:text-3xl font-black text-white uppercase font-sans">
-            Winner: {legsP1 === 3 ? p1?.name : p2?.name} ({legsP1}-{legsP2})
-          </h3>
+
+          {legsP1 === 2 && legsP2 === 2 ? (
+            <div className="space-y-1">
+              <h3 className="text-2xl sm:text-3xl font-black text-amber-400 uppercase font-sans">
+                2 - 2 Draw (Leg Split!)
+              </h3>
+              <p className="text-xs font-mono font-bold text-amber-300">
+                1 point awarded to {p1?.name} & 1 point awarded to {p2?.name}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <h3 className="text-2xl sm:text-3xl font-black text-white uppercase font-sans">
+                Winner: {legsP1 > legsP2 ? p1?.name : p2?.name} ({legsP1}-{legsP2})
+              </h3>
+              <p className="text-xs font-mono font-bold text-emerald-400">
+                3 points awarded to winner · 0 points to loser
+              </p>
+            </div>
+          )}
+
           <p className="text-sm text-neutral-300">
             {p1?.name}: {p1Avg} avg · {p1180s}x 180s | {p2?.name}: {p2Avg} avg · {p2180s}x 180s
           </p>
@@ -330,7 +353,7 @@ export const Live301Scorer: React.FC<Live301ScorerProps> = ({ players, onComplet
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <div className="bg-neutral-950/60 p-2 rounded-lg border border-neutral-800">
               <span className="text-neutral-500 block text-[10px] uppercase font-bold">Legs Won</span>
-              <span className="text-xl font-mono font-black text-red-500">{legsP1} <span className="text-xs text-neutral-500">/ 3</span></span>
+              <span className="text-xl font-mono font-black text-red-500">{legsP1} <span className="text-xs text-neutral-500">/ 4</span></span>
             </div>
             <div className="bg-neutral-950/60 p-2 rounded-lg border border-neutral-800">
               <span className="text-neutral-500 block text-[10px] uppercase font-bold">3-Dart Avg</span>
@@ -390,7 +413,7 @@ export const Live301Scorer: React.FC<Live301ScorerProps> = ({ players, onComplet
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <div className="bg-neutral-950/60 p-2 rounded-lg border border-neutral-800">
               <span className="text-neutral-500 block text-[10px] uppercase font-bold">Legs Won</span>
-              <span className="text-xl font-mono font-black text-blue-500">{legsP2} <span className="text-xs text-neutral-500">/ 3</span></span>
+              <span className="text-xl font-mono font-black text-blue-500">{legsP2} <span className="text-xs text-neutral-500">/ 4</span></span>
             </div>
             <div className="bg-neutral-950/60 p-2 rounded-lg border border-neutral-800">
               <span className="text-neutral-500 block text-[10px] uppercase font-bold">3-Dart Avg</span>

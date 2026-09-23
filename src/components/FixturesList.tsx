@@ -168,10 +168,17 @@ export const FixturesList: React.FC<FixturesListProps> = ({
                     </span>
 
                     {isCompleted ? (
-                      <span className="flex items-center gap-1 text-emerald-400 font-semibold text-[11px]">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Completed</span>
-                      </span>
+                      res.player1Legs === res.player2Legs ? (
+                        <span className="flex items-center gap-1 text-amber-400 font-bold text-[11px] bg-amber-950/70 border border-amber-800/80 px-2 py-0.5 rounded">
+                          <CheckCircle2 className="w-3 h-3 text-amber-400" />
+                          <span>Draw (2-2) · 1 pt each</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-emerald-400 font-semibold text-[11px]">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Completed</span>
+                        </span>
+                      )
                     ) : (
                       <span className="flex items-center gap-1 text-neutral-500 font-medium text-[11px]">
                         <Clock className="w-3 h-3" />
@@ -217,7 +224,9 @@ export const FixturesList: React.FC<FixturesListProps> = ({
                       )}
                       <span className={`w-7 text-center font-mono font-black text-base rounded ${
                         isCompleted
-                          ? res.winnerId === p1.id
+                          ? res.player1Legs === res.player2Legs
+                            ? 'bg-amber-950/70 text-amber-300 border border-amber-800/80'
+                            : res.winnerId === p1.id
                             ? 'bg-red-950 text-red-400 border border-red-800'
                             : 'text-neutral-500'
                           : 'text-neutral-600'
@@ -255,7 +264,9 @@ export const FixturesList: React.FC<FixturesListProps> = ({
                       )}
                       <span className={`w-7 text-center font-mono font-black text-base rounded ${
                         isCompleted
-                          ? res.winnerId === p2.id
+                          ? res.player1Legs === res.player2Legs
+                            ? 'bg-amber-950/70 text-amber-300 border border-amber-800/80'
+                            : res.winnerId === p2.id
                             ? 'bg-blue-950 text-blue-400 border border-blue-800'
                             : 'text-neutral-500'
                           : 'text-neutral-600'

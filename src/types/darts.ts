@@ -14,10 +14,11 @@ export interface MatchResult {
   round: 1 | 2;
   player1Id: string;
   player2Id: string;
-  player1Legs: number; // 0 to 3 (best of 5)
-  player2Legs: number; // 0 to 3
-  winnerId: string;
-  loserId: string;
+  player1Legs: number; // 0 to 4 (fixed 4 legs per game)
+  player2Legs: number; // 0 to 4
+  winnerId: string | null; // null if draw (2-2)
+  loserId: string | null; // null if draw (2-2)
+  isDraw?: boolean;
   player1Avg: number; // 3-dart average
   player2Avg: number;
   player1180s: number;
@@ -42,6 +43,7 @@ export interface PlayerStats {
   player: Player;
   played: number;
   won: number;
+  drawn: number;
   lost: number;
   legsFor: number;
   legsAgainst: number;
@@ -52,13 +54,14 @@ export interface PlayerStats {
   highestAverage: number;
   total180s: number;
   highestCheckout: number;
-  form: ('W' | 'L')[];
+  form: ('W' | 'D' | 'L')[];
 }
 
 export interface HeadToHeadRecord {
   opponent: Player;
   played: number;
   wins: number;
+  draws: number;
   losses: number;
   legsFor: number;
   legsAgainst: number;

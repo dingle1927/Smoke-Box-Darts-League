@@ -26,6 +26,7 @@ import { calculatePlayerStats } from './utils/statsCalculator';
 import { Header } from './components/Header';
 import { HeroBanner } from './components/HeroBanner';
 import { StandingsTable } from './components/StandingsTable';
+import { LeagueRules } from './components/LeagueRules';
 import { Leaderboards } from './components/Leaderboards';
 import { FixtureGenerator } from './components/FixtureGenerator';
 import { FixturesList } from './components/FixturesList';
@@ -323,6 +324,7 @@ export default function App() {
           <HeroBanner
             onGoToGenerator={() => setCurrentTab('generator')}
             onGoToScorer={() => setCurrentTab('scorer')}
+            onGoToRules={() => setCurrentTab('rules')}
             onGoToAdmin={() => {
               if (isAdmin) setIsAdminPortalOpen(true);
               else setIsAdminLoginOpen(true);
@@ -337,7 +339,20 @@ export default function App() {
 
         {/* Tab 1: Standings */}
         {currentTab === 'standings' && (
-          <StandingsTable stats={stats} onSelectPlayer={handleSelectPlayer} />
+          <StandingsTable 
+            stats={stats} 
+            onSelectPlayer={handleSelectPlayer}
+            onGoToRules={() => setCurrentTab('rules')}
+          />
+        )}
+
+        {/* Tab: Official League Rules & Scoring System */}
+        {currentTab === 'rules' && (
+          <LeagueRules
+            onGoToStandings={() => setCurrentTab('standings')}
+            onGoToFixtures={() => setCurrentTab('fixtures')}
+            onGoToScorer={() => setCurrentTab('scorer')}
+          />
         )}
 
         {/* Tab 2: Leaderboards */}

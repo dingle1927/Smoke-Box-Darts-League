@@ -210,7 +210,8 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
               const isP1 = m.player1Id === playerId;
               const opponentId = isP1 ? m.player2Id : m.player1Id;
               const opponent = playerMap.get(opponentId);
-              const won = m.winnerId === playerId;
+              const isDraw = m.player1Legs === m.player2Legs;
+              const won = !isDraw && (m.winnerId === playerId || (isP1 ? m.player1Legs > m.player2Legs : m.player2Legs > m.player1Legs));
               const myLegs = isP1 ? m.player1Legs : m.player2Legs;
               const oppLegs = isP1 ? m.player2Legs : m.player1Legs;
               const myAvg = isP1 ? m.player1Avg : m.player2Avg;
@@ -222,23 +223,41 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
                 <div
                   key={m.id}
                   className={`p-4 rounded-xl border transition-all ${
-                    won
+                    isDraw
+                      ? 'bg-neutral-900/90 border-amber-900/40 shadow-sm'
+                      : won
                       ? 'bg-neutral-900/90 border-emerald-900/40 shadow-sm'
                       : 'bg-neutral-950/80 border-neutral-800'
                   }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className={`p-1.5 rounded-lg ${won ? 'bg-emerald-950 text-emerald-400' : 'bg-neutral-900 text-neutral-500'}`}>
-                        {won ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                      <div className={`p-1.5 rounded-lg ${
+                        isDraw
+                          ? 'bg-amber-950 text-amber-400'
+                          : won
+                          ? 'bg-emerald-950 text-emerald-400'
+                          : 'bg-neutral-900 text-neutral-500'
+                      }`}>
+                        {isDraw ? (
+                          <span className="font-mono font-black text-sm px-1">=</span>
+                        ) : won ? (
+                          <CheckCircle className="w-5 h-5" />
+                        ) : (
+                          <XCircle className="w-5 h-5" />
+                        )}
                       </div>
 
                       <div>
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-black uppercase font-mono px-1.5 py-0.5 rounded ${
-                            won ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-neutral-900 text-neutral-400'
+                            isDraw
+                              ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                              : won
+                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                              : 'bg-neutral-900 text-neutral-400'
                           }`}>
-                            {won ? 'VICTORY' : 'DEFEAT'}
+                            {isDraw ? 'DRAW (1 pt)' : won ? 'VICTORY (3 pts)' : 'DEFEAT (0 pts)'}
                           </span>
                           <span className="text-xs text-neutral-400">
                             Round {m.round} · {new Date(m.playedAt).toLocaleDateString()}
@@ -265,9 +284,9 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5 bg-neutral-950 px-3 py-1.5 rounded-lg border border-neutral-800 font-mono font-black text-lg">
-                        <span className={won ? 'text-emerald-400' : 'text-neutral-400'}>{myLegs}</span>
+                        <span className={isDraw ? 'text-amber-400' : won ? 'text-emerald-400' : 'text-neutral-400'}>{myLegs}</span>
                         <span className="text-neutral-600">-</span>
-                        <span className={!won ? 'text-red-400' : 'text-neutral-400'}>{oppLegs}</span>
+                        <span className={isDraw ? 'text-amber-400' : !won ? 'text-red-400' : 'text-neutral-400'}>{oppLegs}</span>
                       </div>
                     </div>
                   </div>
@@ -311,9 +330,9 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
                         ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                         : isBehind
                         ? 'bg-red-950 text-red-400 border border-red-800'
-                        : 'bg-neutral-800 text-neutral-400'
+                        : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
                     }`}>
-                      {rec.wins}W - {rec.losses}L
+                      {rec.wins}W - {rec.draws || 0}D - {rec.losses}L
                     </span>
                   </div>
                 </div>

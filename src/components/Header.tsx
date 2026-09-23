@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, CalendarCheck, ShieldCheck, Flame, Users, Lock, Unlock, Menu, X, Target, Cloud, RefreshCw } from 'lucide-react';
+import { Trophy, CalendarCheck, ShieldCheck, Flame, Users, Lock, Unlock, Menu, X, Target, Cloud, RefreshCw, BookOpen } from 'lucide-react';
 import { ASSETS } from '../utils/assets';
 
 interface HeaderProps {
@@ -25,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navItems = [
     { id: 'standings', label: 'Standings', icon: Trophy },
+    { id: 'rules', label: 'League Rules', icon: BookOpen },
     { id: 'leaderboards', label: 'Leaderboards', icon: Flame },
     { id: 'generator', label: 'Session Match Generator', icon: CalendarCheck, highlight: true },
     { id: 'fixtures', label: 'Fixtures & Results', icon: Users },

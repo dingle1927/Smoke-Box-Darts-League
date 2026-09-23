@@ -17,21 +17,63 @@ const DB_FILE = path.resolve(DATA_DIR, 'league_database.json');
 app.use(express.json({ limit: '10mb' }));
 
 // Supabase Client Setup (optional remote cloud database)
+function normalizeSupabaseUrl(rawUrl?: string): string | null {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  // If already a full URL with scheme
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+
+  // If provided as a domain like "xyz.supabase.co" without protocol
+  if (trimmed.includes('.')) {
+    try {
+      const withHttps = `https://${trimmed}`;
+      new URL(withHttps);
+      return withHttps;
+    } catch {
+      return null;
+    }
+  }
+
+  // If provided as just the project ID/ref (e.g. "tnvrsfezqkrfnhorarkb")
+  try {
+    const constructed = `https://${trimmed}.supabase.co`;
+    new URL(constructed);
+    return constructed;
+  } catch {
+    return null;
+  }
+}
+
 let supabase: SupabaseClient | null = null;
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+let supabaseTableReady = false;
+const rawSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   process.env.SUPABASE_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY;
 
+const supabaseUrl = normalizeSupabaseUrl(rawSupabaseUrl);
+
 if (supabaseUrl && supabaseKey) {
   try {
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log('[Supabase] Initialized cloud connection to', supabaseUrl);
+    console.log('[Supabase] Initialized cloud client for', supabaseUrl);
   } catch (err) {
-    console.error('[Supabase] Failed to initialize client:', err);
+    console.warn('[Supabase] Could not initialize client:', err instanceof Error ? err.message : err);
+    supabase = null;
   }
+} else if (rawSupabaseUrl) {
+  console.warn('[Supabase] Provided SUPABASE_URL could not be parsed into a valid URL:', rawSupabaseUrl);
 }
 
 interface LeagueState {
@@ -87,6 +129,8 @@ function loadStateFromDisk(): LeagueState | null {
 }
 
 // Sync with Supabase if configured
+let supabaseNoticeLogged = false;
+
 async function syncFromSupabase() {
   if (!supabase) return;
   try {
@@ -96,7 +140,22 @@ async function syncFromSupabase() {
       .eq('id', 'primary')
       .single();
 
-    if (!error && data && data.payload) {
+    if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.code === '42P01') {
+        supabaseTableReady = false;
+        if (!supabaseNoticeLogged) {
+          console.log('[Supabase] Note: "smokebox_league_state" table not found in Supabase schema. Operating with persistent cloud disk storage.');
+          supabaseNoticeLogged = true;
+        }
+        return;
+      }
+      // Transient error, don't crash
+      return;
+    }
+
+    supabaseTableReady = true;
+
+    if (data && data.payload) {
       const cloudPayload = data.payload as LeagueState;
       if (
         !leagueState.lastUpdated ||
@@ -108,7 +167,7 @@ async function syncFromSupabase() {
       }
     }
   } catch (err) {
-    console.warn('[Supabase] Sync read error (will use local cloud store):', err);
+    // Silent fallback to local storage
   }
 }
 
@@ -121,10 +180,16 @@ async function persistToSupabase(state: LeagueState) {
       updated_at: new Date().toISOString(),
     });
     if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.code === '42P01') {
+        supabaseTableReady = false;
+        return;
+      }
       console.warn('[Supabase] Upsert warning:', error.message);
+    } else {
+      supabaseTableReady = true;
     }
   } catch (err) {
-    console.warn('[Supabase] Error writing state to Supabase:', err);
+    // Silent fallback
   }
 }
 

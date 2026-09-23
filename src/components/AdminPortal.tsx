@@ -118,14 +118,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       return;
     }
 
-    // Best of 5 legs rule: one must have 3, the other must have <= 2
-    if (!((p1Legs === 3 && p2Legs >= 0 && p2Legs <= 2) || (p2Legs === 3 && p1Legs >= 0 && p1Legs <= 2))) {
-      setFormError('Best of 5 format requires the winner to reach exactly 3 legs (e.g., 3-0, 3-1, 3-2, 0-3, 1-3, 2-3).');
+    // Fixed 4 legs per match rule: total legs must be exactly 4 (4-0, 3-1, 2-2, 1-3, 0-4)
+    const totalLegs = p1Legs + p2Legs;
+    if (totalLegs !== 4 || p1Legs < 0 || p1Legs > 4 || p2Legs < 0 || p2Legs > 4) {
+      setFormError('Matches are fixed at exactly 4 legs per game. The score must add up to 4 legs (e.g. 4-0, 3-1, 2-2, 1-3, 0-4).');
       return;
     }
 
-    const winnerId = p1Legs === 3 ? player1Id : player2Id;
-    const loserId = p1Legs === 3 ? player2Id : player1Id;
+    const isDraw = p1Legs === 2 && p2Legs === 2;
+    const winnerId = isDraw ? null : (p1Legs > p2Legs ? player1Id : player2Id);
+    const loserId = isDraw ? null : (p1Legs > p2Legs ? player2Id : player1Id);
 
     // Check checkout bounds
     if (p1Checkout > 170 || p2Checkout > 170) {
@@ -165,6 +167,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       player2Legs: p2Legs,
       winnerId,
       loserId,
+      isDraw,
       player1Avg: Number(parseFloat(p1Avg) || 0),
       player2Avg: Number(parseFloat(p2Avg) || 0),
       player1180s: Number(p1180s) || 0,
@@ -412,14 +415,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               </div>
 
-              {/* Legs Result Section (Best of 5) */}
+              {/* Legs Result Section (Fixed 4 Legs) */}
               <div className="bg-neutral-950/70 p-4 rounded-xl border border-neutral-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                    Match Result (Best of 5 Legs — First to 3)
+                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    Match Result (Fixed 4 Legs Per Game)
                   </span>
-                  <span className="text-xs text-neutral-500">
-                    Winner must have 3 legs
+                  <span className="text-xs font-mono font-semibold text-neutral-400">
+                    Total legs must equal 4
                   </span>
                 </div>
 
@@ -427,26 +431,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-neutral-400 font-semibold mr-1">Quick Select:</span>
                   {[
-                    { l1: 3, l2: 0, label: '3 - 0' },
-                    { l1: 3, l2: 1, label: '3 - 1' },
-                    { l1: 3, l2: 2, label: '3 - 2' },
-                    { l1: 2, l2: 3, label: '2 - 3' },
-                    { l1: 1, l2: 3, label: '1 - 3' },
-                    { l1: 0, l2: 3, label: '0 - 3' },
-                  ].map(preset => (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => applyPresetScore(preset.l1, preset.l2)}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono font-black transition-all ${
-                        p1Legs === preset.l1 && p2Legs === preset.l2
-                          ? 'bg-red-600 text-white shadow-sm'
-                          : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+                    { l1: 4, l2: 0, label: '4 - 0', note: 'P1 Win (3 pts)' },
+                    { l1: 3, l2: 1, label: '3 - 1', note: 'P1 Win (3 pts)' },
+                    { l1: 2, l2: 2, label: '2 - 2', note: 'Draw (1 pt each)' },
+                    { l1: 1, l2: 3, label: '1 - 3', note: 'P2 Win (3 pts)' },
+                    { l1: 0, l2: 4, label: '0 - 4', note: 'P2 Win (3 pts)' },
+                  ].map(preset => {
+                    const isSelected = p1Legs === preset.l1 && p2Legs === preset.l2;
+                    const isDrawPreset = preset.l1 === 2 && preset.l2 === 2;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => applyPresetScore(preset.l1, preset.l2)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-black transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? isDrawPreset
+                              ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
+                              : 'bg-red-600 text-white shadow-md ring-2 ring-red-400/50'
+                            : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
+                        }`}
+                      >
+                        <span>{preset.label}</span>
+                        <span className={`text-[10px] font-sans font-medium px-1 rounded ${
+                          isSelected ? 'bg-black/30 text-white' : 'text-neutral-500'
+                        }`}>
+                          {preset.l1 === 2 ? 'Draw' : preset.l1 > preset.l2 ? 'P1' : 'P2'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Number selectors */}
@@ -455,12 +469,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <span className="text-xs text-neutral-400 block truncate font-semibold">
                       {playerMap.get(player1Id)?.name || 'Player 1'} Legs
                     </span>
-                    <div className="flex items-center justify-center gap-3 mt-2">
-                      {[0, 1, 2, 3].map(n => (
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      {[0, 1, 2, 3, 4].map(n => (
                         <button
                           key={n}
                           type="button"
-                          onClick={() => setP1Legs(n)}
+                          onClick={() => {
+                            setP1Legs(n);
+                            setP2Legs(4 - n);
+                          }}
                           className={`w-9 h-9 rounded-lg font-mono font-black text-sm transition-all ${
                             p1Legs === n
                               ? 'bg-red-600 text-white shadow-md'
@@ -477,12 +494,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <span className="text-xs text-neutral-400 block truncate font-semibold">
                       {playerMap.get(player2Id)?.name || 'Player 2'} Legs
                     </span>
-                    <div className="flex items-center justify-center gap-3 mt-2">
-                      {[0, 1, 2, 3].map(n => (
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      {[0, 1, 2, 3, 4].map(n => (
                         <button
                           key={n}
                           type="button"
-                          onClick={() => setP2Legs(n)}
+                          onClick={() => {
+                            setP2Legs(n);
+                            setP1Legs(4 - n);
+                          }}
                           className={`w-9 h-9 rounded-lg font-mono font-black text-sm transition-all ${
                             p2Legs === n
                               ? 'bg-blue-600 text-white shadow-md'
@@ -493,6 +513,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </button>
                       ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* Live Calculated Outcome Badge */}
+                <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-xs px-1">
+                  <div className="text-neutral-400 font-medium">
+                    Calculated Result:
+                  </div>
+                  <div>
+                    {p1Legs + p2Legs === 4 ? (
+                      p1Legs === 2 && p2Legs === 2 ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-mono font-bold">
+                          <span>2-2 DRAW</span>
+                          <span className="text-[10px] font-sans font-semibold text-amber-400">(1 pt each)</span>
+                        </span>
+                      ) : p1Legs > p2Legs ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-mono font-bold">
+                          <span>{playerMap.get(player1Id)?.name || 'Player 1'} WIN ({p1Legs}-{p2Legs})</span>
+                          <span className="text-[10px] font-sans font-semibold text-emerald-400">(3 pts to P1, 0 to P2)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-950/80 text-blue-300 border border-blue-800 font-mono font-bold">
+                          <span>{playerMap.get(player2Id)?.name || 'Player 2'} WIN ({p2Legs}-{p1Legs})</span>
+                          <span className="text-[10px] font-sans font-semibold text-blue-400">(3 pts to P2, 0 to P1)</span>
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-red-400 font-semibold text-xs">
+                        Invalid total ({p1Legs + p2Legs}/4 legs) — must total 4
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -690,7 +741,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               </span>
                             </div>
                             <div className="text-[11px] text-neutral-400 mt-0.5">
-                              Winner: <strong className="text-emerald-400">{playerMap.get(m.winnerId)?.name}</strong> · Avg: {m.player1Avg}/{m.player2Avg} · 180s: {(m.player1180s || 0) + (m.player2180s || 0)}
+                              {m.player1Legs === m.player2Legs ? (
+                                <span className="text-amber-400 font-semibold font-mono">
+                                  Result: Draw 2-2 (1 pt each)
+                                </span>
+                              ) : (
+                                <>
+                                  Winner: <strong className="text-emerald-400">{playerMap.get(m.winnerId || (m.player1Legs > m.player2Legs ? m.player1Id : m.player2Id))?.name} (3 pts)</strong>
+                                </>
+                              )} · Avg: {m.player1Avg}/{m.player2Avg} · 180s: {(m.player1180s || 0) + (m.player2180s || 0)}
                             </div>
                           </div>
 
