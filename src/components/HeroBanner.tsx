@@ -48,6 +48,11 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         <div className="max-w-3xl">
           {/* Rules / Specs kicker */}
           <div className="flex flex-wrap items-center gap-2 mb-3 text-xs uppercase tracking-widest font-semibold text-neutral-400">
+            <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/80 font-bold text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Cloud Synced (Mobile & Desktop)
+            </span>
+            <span aria-hidden="true">·</span>
             <span className="text-red-500 font-bold">Official Season</span>
             <span aria-hidden="true">·</span>
             <span>301 Double Out</span>

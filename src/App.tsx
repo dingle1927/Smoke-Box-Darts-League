@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Trophy, CalendarCheck, Flame, Users, Target, Shield, ArrowUp, RefreshCw } from 'lucide-react';
 import { Player, MatchResult, Fixture } from './types/darts';
 import {
@@ -12,6 +12,16 @@ import {
   resetToDemoData,
   clearAllMatches,
 } from './utils/storage';
+import {
+  fetchRemoteState,
+  remoteUpdatePlayers,
+  remoteDeletePlayer,
+  remoteSaveMatch,
+  remoteDeleteMatch,
+  remoteResetDemo,
+  remoteClearMatches,
+  remoteUpdatePin,
+} from './utils/cloudSync';
 import { calculatePlayerStats } from './utils/statsCalculator';
 import { Header } from './components/Header';
 import { HeroBanner } from './components/HeroBanner';
@@ -32,6 +42,10 @@ export default function App() {
   const [adminPin, setAdminPin] = useState<string>(() => getStoredAdminPin());
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
+  // Cloud sync state
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('syncing');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
   // Navigation state
   const [currentTab, setCurrentTab] = useState<string>('standings');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -47,7 +61,7 @@ export default function App() {
   } | null>(null);
   const [editingMatch, setEditingMatch] = useState<MatchResult | null>(null);
 
-  // Save changes to localStorage
+  // Save local changes to localStorage as fast client fallback
   useEffect(() => {
     saveStoredPlayers(players);
   }, [players]);
@@ -56,12 +70,64 @@ export default function App() {
     saveStoredMatches(matches);
   }, [matches]);
 
+  // Synchronize state with central cloud database
+  const syncWithRemote = useCallback(async (showIndicator = false) => {
+    if (showIndicator) setSyncStatus('syncing');
+    try {
+      const remote = await fetchRemoteState();
+      if (remote) {
+        setPlayers(remote.players);
+        setMatches(remote.matches);
+        if (remote.adminPin) setAdminPin(remote.adminPin);
+        saveStoredPlayers(remote.players);
+        saveStoredMatches(remote.matches);
+        if (remote.adminPin) saveStoredAdminPin(remote.adminPin);
+        setSyncStatus('synced');
+        setLastSyncTime(new Date());
+      } else {
+        setSyncStatus('offline');
+      }
+    } catch {
+      setSyncStatus('offline');
+    }
+  }, []);
+
+  // Poll cloud database every 3 seconds & immediately on window focus/visibility change
+  useEffect(() => {
+    syncWithRemote(true);
+
+    const interval = setInterval(() => {
+      syncWithRemote(false);
+    }, 3000);
+
+    const onFocusOrVisible = () => {
+      syncWithRemote(false);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncWithRemote(false);
+      }
+    };
+
+    window.addEventListener('focus', onFocusOrVisible);
+    window.addEventListener('online', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocusOrVisible);
+      window.removeEventListener('online', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [syncWithRemote]);
+
   // Derived calculations
   const stats = useMemo(() => calculatePlayerStats(players, matches), [players, matches]);
   const fixtures = useMemo(() => getLeagueFixtures(players, matches), [players, matches]);
   const activePlayers = useMemo(() => players.filter(p => p.active), [players]);
 
-  // Handlers for Match Operations
+  // Handlers for Match Operations (Syncing to remote cloud database)
   const handleSaveMatchResult = (newOrUpdatedMatch: MatchResult) => {
     setMatches(prev => {
       const existingIndex = prev.findIndex(m => m.id === newOrUpdatedMatch.id || m.fixtureId === newOrUpdatedMatch.fixtureId);
@@ -75,35 +141,97 @@ export default function App() {
 
     setSelectedFixtureForScore(null);
     setEditingMatch(null);
+
+    // Persist to central cloud database
+    remoteSaveMatch(newOrUpdatedMatch).then(res => {
+      if (res) {
+        setMatches(res.matches);
+        saveStoredMatches(res.matches);
+        setLastSyncTime(new Date());
+      }
+    });
   };
 
   const handleDeleteMatchResult = (matchId: string) => {
     setMatches(prev => prev.filter(m => m.id !== matchId));
+
+    // Persist to central cloud database
+    remoteDeleteMatch(matchId).then(res => {
+      if (res) {
+        setMatches(res.matches);
+        saveStoredMatches(res.matches);
+        setLastSyncTime(new Date());
+      }
+    });
   };
 
   const handleDeletePlayer = (playerId: string) => {
     setPlayers(prev => prev.filter(p => p.id !== playerId));
-    // Also remove matches played by this deleted player to keep standings clean
     setMatches(prev => prev.filter(m => m.player1Id !== playerId && m.player2Id !== playerId));
     if (selectedPlayerId === playerId) {
       setSelectedPlayerId(null);
     }
+
+    // Persist to central cloud database immediately
+    remoteDeletePlayer(playerId).then(res => {
+      if (res) {
+        setPlayers(res.players);
+        setMatches(res.matches);
+        saveStoredPlayers(res.players);
+        saveStoredMatches(res.matches);
+        setLastSyncTime(new Date());
+      }
+    });
+  };
+
+  const handleUpdatePlayers = (updatedPlayers: Player[]) => {
+    setPlayers(updatedPlayers);
+    saveStoredPlayers(updatedPlayers);
+
+    // Persist to central cloud database immediately
+    remoteUpdatePlayers(updatedPlayers).then(res => {
+      if (res) {
+        setPlayers(res.players);
+        setLastSyncTime(new Date());
+      }
+    });
   };
 
   const handleResetDemoData = () => {
-    const demo = resetToDemoData();
-    setPlayers(demo.players);
-    setMatches(demo.matches);
+    remoteResetDemo().then(res => {
+      if (res) {
+        setPlayers(res.players);
+        setMatches(res.matches);
+        saveStoredPlayers(res.players);
+        saveStoredMatches(res.matches);
+        setLastSyncTime(new Date());
+      } else {
+        const demo = resetToDemoData();
+        setPlayers(demo.players);
+        setMatches(demo.matches);
+      }
+    });
   };
 
   const handleClearMatches = () => {
-    const cleared = clearAllMatches();
-    setMatches(cleared);
+    remoteClearMatches().then(res => {
+      if (res) {
+        setMatches(res.matches);
+        saveStoredMatches(res.matches);
+        setLastSyncTime(new Date());
+      } else {
+        const cleared = clearAllMatches();
+        setMatches(cleared);
+      }
+    });
   };
 
   const handleUpdateAdminPin = (newPin: string) => {
     setAdminPin(newPin);
     saveStoredAdminPin(newPin);
+    remoteUpdatePin(newPin).then(() => {
+      setLastSyncTime(new Date());
+    });
   };
 
   // Launch Score Entry for a specific match
@@ -179,6 +307,8 @@ export default function App() {
           }
         }}
         onLogoutAdmin={() => setIsAdmin(false)}
+        syncStatus={syncStatus}
+        onManualSync={() => syncWithRemote(true)}
       />
 
       {/* Main Container */}
@@ -287,7 +417,7 @@ export default function App() {
           matches={matches}
           onSaveMatchResult={handleSaveMatchResult}
           onDeleteMatchResult={handleDeleteMatchResult}
-          onUpdatePlayers={setPlayers}
+          onUpdatePlayers={handleUpdatePlayers}
           onDeletePlayer={handleDeletePlayer}
           onResetData={handleResetDemoData}
           onClearMatches={handleClearMatches}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, CalendarCheck, ShieldCheck, Flame, Users, Lock, Unlock, Menu, X, Target } from 'lucide-react';
+import { Trophy, CalendarCheck, ShieldCheck, Flame, Users, Lock, Unlock, Menu, X, Target, Cloud, RefreshCw } from 'lucide-react';
 import { ASSETS } from '../utils/assets';
 
 interface HeaderProps {
@@ -8,6 +8,8 @@ interface HeaderProps {
   isAdmin: boolean;
   onOpenAdminModal: () => void;
   onLogoutAdmin: () => void;
+  syncStatus?: 'synced' | 'syncing' | 'offline' | 'idle';
+  onManualSync?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   isAdmin,
   onOpenAdminModal,
   onLogoutAdmin,
+  syncStatus = 'synced',
+  onManualSync,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -86,8 +90,37 @@ export const Header: React.FC<HeaderProps> = ({
             })}
           </nav>
 
-          {/* Right Action: Admin Access Button */}
+          {/* Right Action: Admin Access Button & Cloud Status */}
           <div className="flex items-center gap-2">
+            {/* Cloud Database Sync Status Indicator */}
+            <button
+              onClick={onManualSync}
+              type="button"
+              title={
+                syncStatus === 'syncing'
+                  ? 'Syncing with remote database...'
+                  : syncStatus === 'offline'
+                  ? 'Offline fallback - changes cached locally'
+                  : 'Live Cloud Sync Active. Click to refresh remote data.'
+              }
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900/90 border border-neutral-800 text-[11px] font-semibold text-neutral-300 hover:text-white hover:border-neutral-700 transition-colors cursor-pointer"
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  syncStatus === 'syncing'
+                    ? 'bg-amber-400 animate-spin'
+                    : syncStatus === 'offline'
+                    ? 'bg-neutral-500'
+                    : 'bg-emerald-400 shadow-sm shadow-emerald-500/50 animate-pulse'
+                }`}
+              />
+              <Cloud className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="hidden sm:inline text-neutral-300">
+                {syncStatus === 'syncing' ? 'Syncing...' : 'Cloud DB'}
+              </span>
+              <RefreshCw className={`w-3 h-3 text-neutral-400 hover:text-white ml-0.5 ${syncStatus === 'syncing' ? 'animate-spin text-blue-400' : ''}`} />
+            </button>
+
             {isAdmin ? (
               <div className="flex items-center gap-1.5 bg-red-950/60 border border-red-800/80 rounded-lg px-3 py-1.5">
                 <ShieldCheck className="w-4 h-4 text-red-400 animate-pulse" />
