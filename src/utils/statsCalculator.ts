@@ -264,8 +264,8 @@ export function getHeadToHeadRecords(
       }
     });
 
-    // In double round robin, 2 matches per pair
-    const unplayedCount = Math.max(0, 2 - directMatches.length);
+    // In single round-robin, 1 match per pair
+    const unplayedCount = Math.max(0, 1 - directMatches.length);
 
     return {
       opponent,

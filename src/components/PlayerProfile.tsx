@@ -326,7 +326,7 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
                     {rec.unplayedCount > 0 ? (
                       <span className="text-blue-400 font-semibold">{rec.unplayedCount} unplayed remaining</span>
                     ) : (
-                      <span className="text-neutral-500">Both fixtures completed</span>
+                      <span className="text-neutral-500">Fixture completed</span>
                     )}
                   </span>
                 </div>

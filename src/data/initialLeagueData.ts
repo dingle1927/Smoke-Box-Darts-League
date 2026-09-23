@@ -16,15 +16,14 @@ export const INITIAL_PLAYERS: Player[] = [
 ];
 
 /**
- * Generate full double round-robin fixtures:
- * Round 1: i plays j (i < j)
- * Round 2: j plays i (return match)
+ * Generate single round-robin fixtures:
+ * Each player plays each other exactly once (Round 1: i plays j, i < j)
  */
 export function generateAllFixtures(players: Player[]): Fixture[] {
   const fixtures: Fixture[] = [];
   const activePlayers = players.filter(p => p.active);
 
-  // Round 1
+  // Single round-robin (each pair plays once)
   for (let i = 0; i < activePlayers.length; i++) {
     for (let j = i + 1; j < activePlayers.length; j++) {
       fixtures.push({
@@ -32,19 +31,6 @@ export function generateAllFixtures(players: Player[]): Fixture[] {
         round: 1,
         player1Id: activePlayers[i].id,
         player2Id: activePlayers[j].id,
-        status: 'unplayed',
-      });
-    }
-  }
-
-  // Round 2 (Reverse / return fixture)
-  for (let i = 0; i < activePlayers.length; i++) {
-    for (let j = i + 1; j < activePlayers.length; j++) {
-      fixtures.push({
-        id: `r2-${activePlayers[j].id}-${activePlayers[i].id}`,
-        round: 2,
-        player1Id: activePlayers[j].id,
-        player2Id: activePlayers[i].id,
         status: 'unplayed',
       });
     }

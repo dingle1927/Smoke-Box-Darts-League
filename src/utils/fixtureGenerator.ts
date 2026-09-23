@@ -16,7 +16,7 @@ export interface GeneratedScheduleResult {
 
 /**
  * Generates an optimized session schedule for the available players.
- * Respects unplayed fixtures in the double round-robin format.
+ * Respects unplayed fixtures in the single round-robin format (each pair plays once).
  * Balances playing time and avoids consecutive matches for the same player when possible.
  */
 export function generateSessionSchedule(
@@ -29,7 +29,7 @@ export function generateSessionSchedule(
   const playerMap = new Map(allPlayers.map(p => [p.id, p]));
   const availableSet = new Set(availablePlayerIds);
 
-  // Generate full double round-robin
+  // Generate full single round-robin fixtures
   const allFixtures = generateAllFixtures(allPlayers);
   const completedMap = new Map<string, MatchResult>();
   completedMatches.forEach(m => completedMap.set(m.fixtureId, m));
@@ -51,25 +51,20 @@ export function generateSessionSchedule(
         const p1 = playerMap.get(fix.player1Id);
         const p2 = playerMap.get(fix.player2Id);
         if (p1 && p2) {
-          // Priority: Round 1 matches come first (urgency = 2), Round 2 comes second (urgency = 1)
-          const urgency = fix.round === 1 ? 2 : 1;
           eligibleUnplayed.push({
             fixture: fix,
             p1,
             p2,
             round: fix.round,
-            urgency,
+            urgency: 1,
           });
         }
       }
     }
   });
 
-  // Sort eligible by round first (Round 1 prioritized)
-  eligibleUnplayed.sort((a, b) => {
-    if (b.urgency !== a.urgency) return b.urgency - a.urgency;
-    return a.fixture.id.localeCompare(b.fixture.id);
-  });
+  // Sort eligible deterministically
+  eligibleUnplayed.sort((a, b) => a.fixture.id.localeCompare(b.fixture.id));
 
   // Scheduling algorithm: Greedy selection with rest constraints
   const pool = [...eligibleUnplayed];
@@ -131,12 +126,7 @@ export function generateSessionSchedule(
 
       const boardNum = boardCount > 1 ? (step % boardCount) + 1 : 1;
 
-      let reason = `Round ${selected.round} Fixture`;
-      if (selected.round === 1) {
-        reason = 'Round 1 Unplayed League Match';
-      } else {
-        reason = 'Round 2 Return Match';
-      }
+      const reason = 'League Season Fixture';
 
       recommendedMatches.push({
         fixtureId: selected.fixture.id,

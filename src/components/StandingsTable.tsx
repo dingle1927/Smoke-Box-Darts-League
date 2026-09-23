@@ -28,7 +28,7 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ stats, onSelectP
             </h2>
           </div>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Double round-robin · 3 pts per win · Best of 5 legs
+            Single round-robin (each player plays once) · 3 pts per win · Best of 5 legs
           </p>
         </div>
 

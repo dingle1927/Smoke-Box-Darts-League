@@ -264,8 +264,13 @@ app.post('/api/league/matches', (req: Request, res: Response) => {
   }
 
   const updated = updateState(prev => {
+    // Single round-robin: only one match per pair in the league season
     const existingIndex = prev.matches.findIndex(
-      m => m.id === match.id || m.fixtureId === match.fixtureId
+      m =>
+        m.id === match.id ||
+        m.fixtureId === match.fixtureId ||
+        (m.player1Id === match.player1Id && m.player2Id === match.player2Id) ||
+        (m.player1Id === match.player2Id && m.player2Id === match.player1Id)
     );
     if (existingIndex >= 0) {
       const nextMatches = [...prev.matches];

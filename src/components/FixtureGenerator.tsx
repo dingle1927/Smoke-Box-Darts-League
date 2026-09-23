@@ -92,7 +92,7 @@ export const FixtureGenerator: React.FC<FixtureGeneratorProps> = ({
               Availability Fixture Generator
             </h2>
             <p className="text-neutral-400 text-sm max-w-2xl mt-1">
-              Check off which players are in attendance tonight. The engine searches all remaining unplayed Round 1 & Round 2 league fixtures between them and builds a balanced, rested match order.
+              Check off which players are in attendance tonight. The engine searches all remaining unplayed league fixtures between them (each player plays each other once) and builds a balanced, rested match order.
             </p>
           </div>
 
@@ -267,10 +267,8 @@ export const FixtureGenerator: React.FC<FixtureGeneratorProps> = ({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap text-xs mb-1">
-                        <span className={`px-2 py-0.5 rounded font-mono font-black text-[10px] uppercase ${
-                          m.round === 1 ? 'bg-blue-950 text-blue-300 border border-blue-800' : 'bg-purple-950 text-purple-300 border border-purple-800'
-                        }`}>
-                          Round {m.round}
+                        <span className="px-2 py-0.5 rounded font-mono font-black text-[10px] uppercase bg-blue-950 text-blue-300 border border-blue-800">
+                          League Match
                         </span>
                         {boardCount > 1 && (
                           <span className="text-neutral-400 font-mono text-[11px]">

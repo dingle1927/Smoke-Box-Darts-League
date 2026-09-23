@@ -24,7 +24,6 @@ export const FixturesList: React.FC<FixturesListProps> = ({
   isAdmin,
   onOpenAdminModal,
 }) => {
-  const [roundFilter, setRoundFilter] = useState<'all' | '1' | '2'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'unplayed'>('all');
   const [playerFilter, setPlayerFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -33,9 +32,6 @@ export const FixturesList: React.FC<FixturesListProps> = ({
 
   const filteredFixtures = useMemo(() => {
     return fixtures.filter(f => {
-      // Round filter
-      if (roundFilter !== 'all' && f.round !== Number(roundFilter)) return false;
-
       // Status filter
       if (statusFilter !== 'all' && f.status !== statusFilter) return false;
 
@@ -56,7 +52,7 @@ export const FixturesList: React.FC<FixturesListProps> = ({
 
       return true;
     });
-  }, [fixtures, roundFilter, statusFilter, playerFilter, searchQuery, playerMap]);
+  }, [fixtures, statusFilter, playerFilter, searchQuery, playerMap]);
 
   return (
     <div className="space-y-6">
@@ -68,7 +64,7 @@ export const FixturesList: React.FC<FixturesListProps> = ({
               League Fixtures & Results
             </h2>
             <p className="text-xs text-neutral-400">
-              Showing {filteredFixtures.length} of {fixtures.length} matches (Double Round-Robin)
+              Showing {filteredFixtures.length} of {fixtures.length} matches (Single Round-Robin · 1 Match Per Pair)
             </p>
           </div>
 
@@ -105,22 +101,10 @@ export const FixturesList: React.FC<FixturesListProps> = ({
             ))}
           </div>
 
-          {/* Round Filter */}
-          <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800">
-            <span className="px-2 text-neutral-500 font-semibold">Stage:</span>
-            {(['all', '1', '2'] as const).map(rd => (
-              <button
-                key={rd}
-                onClick={() => setRoundFilter(rd)}
-                className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
-                  roundFilter === rd
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                {rd === 'all' ? 'All Rounds' : `Round ${rd}`}
-              </button>
-            ))}
+          {/* Format Badge */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-950 border border-neutral-800 text-neutral-400 font-mono text-[11px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+            <span>Single Round-Robin (Plays Once)</span>
           </div>
 
           {/* Filter by Specific Player */}
@@ -148,7 +132,6 @@ export const FixturesList: React.FC<FixturesListProps> = ({
           <p className="text-neutral-400 font-bold">No fixtures match the selected filters</p>
           <button
             onClick={() => {
-              setRoundFilter('all');
               setStatusFilter('all');
               setPlayerFilter('all');
               setSearchQuery('');
@@ -180,14 +163,8 @@ export const FixturesList: React.FC<FixturesListProps> = ({
                 {/* Top header */}
                 <div className="flex items-center justify-between text-xs mb-3">
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] uppercase ${
-                        fixture.round === 1
-                          ? 'bg-blue-950 text-blue-300 border border-blue-800/60'
-                          : 'bg-purple-950 text-purple-300 border border-purple-800/60'
-                      }`}
-                    >
-                      Round {fixture.round}
+                    <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] uppercase bg-blue-950 text-blue-300 border border-blue-800/60">
+                      League Match
                     </span>
 
                     {isCompleted ? (

@@ -262,7 +262,12 @@ export default function App() {
     }
     const matchId = `m-${Date.now()}`;
     const round: 1 | 2 = 1;
-    const fixtureId = `r1-${resultData.player1Id}-${resultData.player2Id}`;
+    // Look up fixture ID regardless of player order to ensure exact single round-robin match mapping
+    const matchingFixture = fixtures.find(
+      f => (f.player1Id === resultData.player1Id && f.player2Id === resultData.player2Id) ||
+           (f.player1Id === resultData.player2Id && f.player2Id === resultData.player1Id)
+    );
+    const fixtureId = matchingFixture?.id || `r1-${resultData.player1Id}-${resultData.player2Id}`;
 
     const completeResult: MatchResult = {
       id: matchId,
@@ -454,7 +459,7 @@ export default function App() {
                 The Smoke <span className="text-red-600">Box</span> Darts League
               </span>
               <p className="text-[11px] text-neutral-500">
-                301 Double Out · Best of 5 Legs · 3 Pts Win / 0 Pts Loss · Double Round-Robin
+                301 Double Out · Best of 5 Legs · 3 Pts Win / 0 Pts Loss · Single Round-Robin
               </p>
             </div>
           </div>

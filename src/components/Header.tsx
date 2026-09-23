@@ -63,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-[11px] uppercase tracking-widest text-neutral-400 font-medium">
-                Darts League · Double Round-Robin
+                Darts League · Single Round-Robin
               </p>
             </div>
           </div>

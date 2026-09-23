@@ -133,17 +133,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       return;
     }
 
-    // Derive fixture ID
-    const fixtureId = editingMatch
-      ? editingMatch.fixtureId
-      : round === 1
-      ? `r1-${player1Id}-${player2Id}`
-      : `r2-${player1Id}-${player2Id}`;
+    // Prevent duplicate matches: Each player only plays each other once in the league season
+    if (!editingMatch) {
+      const existingMatch = matches.find(
+        m => (m.player1Id === player1Id && m.player2Id === player2Id) ||
+             (m.player1Id === player2Id && m.player2Id === player1Id)
+      );
+      if (existingMatch) {
+        setFormError('These two players have already played each other this season. In this league, each player only plays each other once. Use "Edit Match Score" in Match History if you need to update it.');
+        return;
+      }
+    }
+
+    // Derive fixture ID matching the single round-robin schedule
+    let fixtureId = editingMatch?.fixtureId;
+    if (!fixtureId) {
+      const matchingFixture = fixtures.find(
+        f => (f.player1Id === player1Id && f.player2Id === player2Id) ||
+             (f.player1Id === player2Id && f.player2Id === player1Id)
+      );
+      fixtureId = matchingFixture?.id || `r1-${player1Id}-${player2Id}`;
+    }
 
     const matchToSave: MatchResult = {
       id: editingMatch ? editingMatch.id : `m-${Date.now()}`,
       fixtureId,
-      round,
+      round: 1,
       player1Id,
       player2Id,
       player1Legs: p1Legs,
@@ -372,20 +387,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </select>
                 </div>
 
-                {/* Round & Date */}
+                {/* Format & Match Date */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1.5">
-                      Round
+                      League Format
                     </label>
-                    <select
-                      value={round}
-                      onChange={e => setRound(Number(e.target.value) as 1 | 2)}
-                      className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-sm text-white font-mono"
-                    >
-                      <option value={1}>Round 1</option>
-                      <option value={2}>Round 2</option>
-                    </select>
+                    <div className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-neutral-300 font-mono flex items-center h-[38px]">
+                      Single Match (1x Season)
+                    </div>
                   </div>
 
                   <div>
@@ -396,7 +406,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       type="date"
                       value={playedAt}
                       onChange={e => setPlayedAt(e.target.value)}
-                      className="w-full px-2.5 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-white font-mono"
+                      className="w-full px-2.5 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-white font-mono h-[38px]"
                     />
                   </div>
                 </div>
