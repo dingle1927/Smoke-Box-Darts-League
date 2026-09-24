@@ -1,16 +1,21 @@
-import React, { useState } from 'react';
-import { Sparkles, Copy, Check, X, ShieldAlert, Camera, Sliders, RefreshCw, Trophy, Flame } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, Copy, Check, X, ShieldAlert, Camera, Sliders, RefreshCw, Trophy, Flame, Scissors, Image as ImageIcon } from 'lucide-react';
 import { Player, ScenarioPreset } from '../types/darts';
 import { SCENARIO_PRESETS, buildScenarioPrompt } from '../utils/aiNewsGenerator';
 import { ASSETS } from '../utils/assets';
 import { BearAvatar } from './BearAvatar';
+import {
+  getPlayerFaceCutout,
+  compositeFaceOntoActionScene,
+  FaceCutoutResult,
+} from '../utils/aiAvatarTransformer';
 
 interface AIImageStudioModalProps {
   player: Player;
   initialPreset?: ScenarioPreset;
   isOpen: boolean;
   onClose: () => void;
-  onApplyScenarioToPlayer?: (scenario: ScenarioPreset, shirtColors: { primary: string; secondary: string; collar: string }) => void;
+  onApplyScenarioToPlayer?: (scenario: ScenarioPreset, shirtColors: { primary: string; secondary: string; collar: string }, bannerUrl?: string) => void;
 }
 
 const SHIRT_COLORS = [
@@ -37,9 +42,55 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [applied, setApplied] = useState(false);
 
+  // Dynamic composited action scene state
+  const [compositedSceneUrl, setCompositedSceneUrl] = useState<string>('');
+  const [faceCutout, setFaceCutout] = useState<FaceCutoutResult | null>(null);
+  const [isCompositing, setIsCompositing] = useState(false);
+
+  // Load player face cutout and generate action scene composite
+  useEffect(() => {
+    let isMounted = true;
+    const generateScene = async () => {
+      setIsCompositing(true);
+      try {
+        const cutout = await getPlayerFaceCutout(player);
+        if (!isMounted) return;
+        setFaceCutout(cutout);
+
+        if (cutout && cutout.cutoutCanvas) {
+          const comp = await compositeFaceOntoActionScene(selectedPreset, cutout.cutoutCanvas);
+          if (isMounted) {
+            setCompositedSceneUrl(comp);
+          }
+        } else {
+          if (isMounted) {
+            setCompositedSceneUrl(ASSETS.scenarios[selectedPreset] || ASSETS.scenarios.throwing);
+          }
+        }
+      } catch (e) {
+        if (isMounted) {
+          setCompositedSceneUrl(ASSETS.scenarios[selectedPreset] || ASSETS.scenarios.throwing);
+        }
+      } finally {
+        if (isMounted) setIsCompositing(false);
+      }
+    };
+
+    if (isOpen) {
+      generateScene();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, player, selectedPreset]);
+
   if (!isOpen) return null;
 
   const getScenarioImage = (preset: ScenarioPreset) => {
+    if (compositedSceneUrl && selectedPreset === preset) {
+      return compositedSceneUrl;
+    }
     switch (preset) {
       case 'cigarette':
         return ASSETS.scenarios.cigarette;
@@ -47,6 +98,8 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
         return ASSETS.scenarios.disappointment;
       case 'celebration':
         return ASSETS.scenarios.celebration;
+      case 'trophy':
+        return ASSETS.scenarios.trophy;
       case 'throwing':
       default:
         return ASSETS.scenarios.throwing;
@@ -70,11 +123,15 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
 
   const handleApply = () => {
     if (onApplyScenarioToPlayer) {
-      onApplyScenarioToPlayer(selectedPreset, {
-        primary: primaryColor,
-        secondary: secondaryColor,
-        collar: collarColor,
-      });
+      onApplyScenarioToPlayer(
+        selectedPreset,
+        {
+          primary: primaryColor,
+          secondary: secondaryColor,
+          collar: collarColor,
+        },
+        compositedSceneUrl
+      );
       setApplied(true);
       setTimeout(() => setApplied(false), 2000);
     }
@@ -92,14 +149,14 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono font-black uppercase tracking-widest text-red-400">
-                  AI Image Style & Generation Studio
+                  Dynamic AI News & Media Studio
                 </span>
                 <span className="px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-800 text-[10px] font-bold">
                   Rule: Strictly No Green
                 </span>
               </div>
               <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight">
-                {player.name} &mdash; Player Media Studio
+                {player.name} &mdash; Dynamic Action Scene Media
               </h3>
             </div>
           </div>
@@ -114,30 +171,32 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Strict Rule Banner */}
-          <div className="p-3.5 rounded-xl bg-red-950/60 border border-red-800/80 flex items-start gap-3 text-xs">
-            <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          {/* Segregation Guarantee Banner */}
+          <div className="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/60 flex items-start gap-3 text-xs">
+            <Sparkles className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
             <div>
-              <strong className="text-red-300 font-bold block mb-0.5">
-                CRITICAL RULE: Zero Green Policy
+              <strong className="text-blue-200 font-bold block mb-0.5">
+                Dynamic Action Media Segregation Guarantee
               </strong>
               <p className="text-neutral-300 leading-relaxed">
-                Every player wears a customized darts shirt. <strong>Never include the color green</strong> in any darts shirt, collar, embroidery, background, or lighting. All presets and prompts strictly enforce this league regulation.
+                Action scenes composite your isolated face cutout into arena scenarios (throwing, celebrating in front of the crowd, hands on head) for news stories and profile banners. <strong>Your original uploaded avatar is strictly preserved and never overwritten.</strong>
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: Visual Scene & Player Badge Preview (6 Cols) */}
+            {/* Left Column: Dynamic Composited Scene (6 Cols) */}
             <div className="lg:col-span-6 space-y-4">
               <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-neutral-950 border border-neutral-800 shadow-2xl">
                 <img
                   src={getScenarioImage(selectedPreset)}
-                  alt="Scenario Scene"
+                  alt="Action Scene"
                   referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover object-center filter brightness-95"
+                  className={`w-full h-full object-cover object-center filter brightness-95 transition-opacity ${
+                    isCompositing ? 'opacity-70' : 'opacity-100'
+                  }`}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/20 to-transparent" />
 
                 {/* Scenario Title Badge */}
                 <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
@@ -149,33 +208,61 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
                   </span>
                 </div>
 
-                {/* Seamless Player Face Badge Styled into Custom Darts Shirt */}
-                <div className="absolute bottom-4 left-4 right-4 bg-neutral-950/90 backdrop-blur-md p-3 rounded-2xl border border-neutral-800 shadow-2xl flex items-center gap-3">
-                  <div className="relative">
-                    <BearAvatar player={player} size="xl" />
-                    <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono font-black text-[9px] border border-neutral-950 shadow">
-                      PRO
+                {/* Compositing Spinner */}
+                {isCompositing && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-xs">
+                    <div className="px-3 py-1.5 rounded-xl bg-neutral-900/90 border border-neutral-700 text-xs text-white font-mono flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-400" />
+                      <span>Compositing face cutout onto scene...</span>
                     </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-black text-white truncate">{player.name}</span>
-                      <span className="text-xs text-red-400 font-bold">"{player.nickname}"</span>
-                    </div>
-                    <div className="text-[11px] text-neutral-400 mt-0.5">
-                      Custom Darts Shirt: <span className="text-neutral-200 font-semibold">{primaryColor} / {secondaryColor}</span>
-                    </div>
-                    <div className="text-[10px] text-amber-400/90 font-mono mt-0.5">
-                      ★ Certified Custom Apparel · No Green
+                )}
+
+                {/* Player Original Avatar Badge & Cutout Pill */}
+                <div className="absolute bottom-3 left-3 right-3 bg-neutral-950/90 backdrop-blur-md p-2.5 rounded-2xl border border-neutral-800 shadow-2xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <BearAvatar player={player} size="md" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-white truncate">{player.name}</span>
+                        <span className="text-[11px] text-red-400 font-bold">"{player.nickname}"</span>
+                      </div>
+                      <div className="text-[10px] text-neutral-400 truncate">
+                        Original Avatar (Untouched)
+                      </div>
                     </div>
                   </div>
+
+                  {/* Face cutout preview */}
+                  {faceCutout && faceCutout.cutoutDataUrl && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div
+                        className="w-9 h-11 rounded-lg overflow-hidden border border-neutral-700 bg-neutral-800 flex items-center justify-center"
+                        style={{
+                          backgroundImage:
+                            'linear-gradient(45deg, #1c1c1c 25%, transparent 25%), linear-gradient(-45deg, #1c1c1c 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1c1c1c 75%), linear-gradient(-45deg, transparent 75%, #1c1c1c 75%)',
+                          backgroundSize: '6px 6px',
+                        }}
+                        title="Isolated High-Res Face Cutout"
+                      >
+                        <img
+                          src={faceCutout.cutoutDataUrl}
+                          alt="Face Cutout"
+                          className="w-full h-full object-contain filter drop-shadow"
+                        />
+                      </div>
+                      <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase hidden sm:inline">
+                        AI Cutout Active
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Scenario Quick Selector */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-neutral-300">
-                  Select Preset Scenario:
+                  Select Action Scenario:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {SCENARIO_PRESETS.map(preset => (
@@ -247,7 +334,7 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
 
                 <div>
                   <label className="block text-[11px] text-neutral-400 font-semibold mb-1">
-                    Optional Match Context / Outcome Note
+                    Optional Match Context / Headline Note
                   </label>
                   <input
                     type="text"
@@ -263,7 +350,7 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold uppercase tracking-wider text-neutral-300">
-                    Generated AI Prompt (Strictly Compliant):
+                    Generated AI Prompt:
                   </label>
                   <button
                     type="button"
@@ -284,7 +371,7 @@ export const AIImageStudioModal: React.FC<AIImageStudioModalProps> = ({
                   </button>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800/90 font-mono text-xs text-neutral-300 leading-relaxed max-h-44 overflow-y-auto select-all">
+                <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800/90 font-mono text-xs text-neutral-300 leading-relaxed max-h-36 overflow-y-auto select-all">
                   {currentPrompt}
                 </div>
               </div>

@@ -1,15 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Upload, Link, Trash2, Check, X, RefreshCw, Sliders, ShieldCheck, Scissors, UserCheck } from 'lucide-react';
+import { Camera, Upload, Link as LinkIcon, Trash2, Check, X, ShieldCheck, Scissors, UserCheck, AlertCircle, RefreshCw, Sliders } from 'lucide-react';
 import { Player, ScenarioPreset } from '../types/darts';
 import { BearAvatar } from './BearAvatar';
 import {
-  processPlayerAvatarWithAI,
+  extractPreciseFaceCutout,
+  detectFaceCoordinates,
   FaceBoundingBox,
-  FaceCutoutOptions,
-  compositeFaceOntoUniform,
-  createFaceCutout,
 } from '../utils/aiAvatarTransformer';
-import { ASSETS } from '../utils/assets';
 
 interface PlayerPhotoModalProps {
   player: Player;
@@ -23,11 +20,13 @@ interface PlayerPhotoModalProps {
   ) => Promise<void> | void;
 }
 
-const PRESET_STANDARDIZED_AVATARS = [
-  { name: 'Standard Pro 1 (Navy/Blue Tie)', url: ASSETS.standardAvatars[0] },
-  { name: 'Standard Pro 2 (Classic Blazer)', url: ASSETS.standardAvatars[1] },
-  { name: 'Standard Pro 3 (Tailored Suit)', url: ASSETS.standardAvatars[2] },
-  { name: 'Standard Pro 4 (Studio Gray)', url: ASSETS.standardAvatars[3] },
+const SHIRT_COLORS = [
+  { name: 'Obsidian Black', hex: '#171717' },
+  { name: 'Crimson Red', hex: '#dc2626' },
+  { name: 'Cobalt Blue', hex: '#2563eb' },
+  { name: 'Royal Purple', hex: '#7e22ce' },
+  { name: 'Charcoal Gray', hex: '#374151' },
+  { name: 'Championship Gold', hex: '#d97706' },
 ];
 
 export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
@@ -36,113 +35,90 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
   onClose,
   onSave,
 }) => {
-  // Current active smart avatar headshot
-  const [smartAvatarUrl, setSmartAvatarUrl] = useState<string>(
-    player.smartAvatarUrl || player.photoUrl || player.avatarSeed || ''
+  // Current active photo URL (untouched original upload)
+  const [photoUrl, setPhotoUrl] = useState<string>(
+    player.photoUrl || player.smartAvatarUrl || player.avatarSeed || ''
   );
-  // Raw original uploaded face photo
-  const [originalFaceUrl, setOriginalFaceUrl] = useState<string>(
-    player.originalPhotoUrl || player.photoUrl || ''
-  );
-  // Isolated face cutout with transparent background
+  const [urlInput, setUrlInput] = useState<string>('');
+  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
+
+  // High-resolution isolated face cutout for dynamic news scenes
   const [cutoutDataUrl, setCutoutDataUrl] = useState<string>('');
-  const [detectedFaceBox, setDetectedFaceBox] = useState<FaceBoundingBox | null>(null);
+  const [isExtractingCutout, setIsExtractingCutout] = useState<boolean>(false);
+  const [cutoutStatus, setCutoutStatus] = useState<string | null>(null);
 
-  // Fine-tuning adjustments for face alignment on the uniform
-  const [faceScale, setFaceScale] = useState<number>(1.0);
-  const [verticalOffset, setVerticalOffset] = useState<number>(0);
-  const [horizontalOffset, setHorizontalOffset] = useState<number>(0);
-  const [showAdjustments, setShowAdjustments] = useState<boolean>(false);
+  // Apparel customization
+  const [primaryColor, setPrimaryColor] = useState<string>(
+    player.customShirtColors?.primary || 'Crimson Red'
+  );
+  const [secondaryColor, setSecondaryColor] = useState<string>(
+    player.customShirtColors?.secondary || 'Obsidian Black'
+  );
+  const [collarColor, setCollarColor] = useState<string>(
+    player.customShirtColors?.collar || 'Obsidian Black'
+  );
+  const [preferredScenario, setPreferredScenario] = useState<ScenarioPreset>(
+    player.preferredScenario || 'throwing'
+  );
 
-  const [primaryColor] = useState<string>(player.customShirtColors?.primary || 'Crimson Red');
-  const [secondaryColor] = useState<string>(player.customShirtColors?.secondary || 'Obsidian Black');
-  const [collarColor] = useState<string>(player.customShirtColors?.collar || 'Obsidian Black');
-  const [preferredScenario] = useState<ScenarioPreset>(player.preferredScenario || 'throwing');
-
-  const [isProcessingAI, setIsProcessingAI] = useState<boolean>(false);
-  const [aiStatusMessage, setAiStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const loadedImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Whenever a photo is set, run background face segmentation for dynamic news scenes
+  useEffect(() => {
+    if (!photoUrl) {
+      setCutoutDataUrl('');
+      setCutoutStatus(null);
+      return;
+    }
+
+    let isMounted = true;
+    const processCutoutForDynamicScenes = async () => {
+      setIsExtractingCutout(true);
+      setCutoutStatus('Analyzing facial boundaries with AI vision...');
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise((res, rej) => {
+          img.onload = () => res(img);
+          img.onerror = e => rej(e);
+          img.src = photoUrl;
+        });
+
+        if (!isMounted) return;
+
+        // Detect facial boundaries
+        const detectedBox = await detectFaceCoordinates(photoUrl, player.name);
+        if (!isMounted) return;
+
+        setCutoutStatus('Segmenting face & hair contours for action scenes...');
+        const result = extractPreciseFaceCutout(img, detectedBox);
+
+        if (isMounted) {
+          setCutoutDataUrl(result.cutoutDataUrl);
+          setCutoutStatus('High-resolution face cutout ready for dynamic news action scenes.');
+        }
+      } catch (err) {
+        if (isMounted) {
+          setCutoutStatus('Notice: Standard face cutout available for dynamic action scenes.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsExtractingCutout(false);
+        }
+      }
+    };
+
+    processCutoutForDynamicScenes();
+    return () => {
+      isMounted = false;
+    };
+  }, [photoUrl, player.name]);
 
   if (!isOpen) return null;
-
-  /**
-   * Re-composites the face cutout onto the uniform when slider values change
-   */
-  const reCompositeWithAdjustments = async (
-    scale: number,
-    vOffset: number,
-    hOffset: number
-  ) => {
-    if (!loadedImageRef.current) return;
-    try {
-      const { cutoutCanvas, cutoutDataUrl: newCutout } = createFaceCutout(
-        loadedImageRef.current,
-        detectedFaceBox
-      );
-      setCutoutDataUrl(newCutout);
-
-      const composite = await compositeFaceOntoUniform(cutoutCanvas, {
-        scale,
-        verticalOffset: vOffset,
-        horizontalOffset: hOffset,
-        faceBox: detectedFaceBox,
-      });
-      setSmartAvatarUrl(composite);
-    } catch (err) {
-      console.warn('Adjustment re-composite error:', err);
-    }
-  };
-
-  /**
-   * Full AI Face Cutout & Uniform Pipeline:
-   * 1. Detects face & head boundaries (via Gemini AI vision or client vision engine).
-   * 2. Precisely segments ONLY the player's face, leaving behind messy background & clothing.
-   * 3. Seamlessly blends & composites the cutout face onto the white shirt, blue tie, black blazer template.
-   * 4. Preserves authentic facial features, skin tone, and expression without distortion.
-   */
-  const processFaceWithAI = async (faceImageData: string, options?: FaceCutoutOptions) => {
-    setIsProcessingAI(true);
-    setErrorMsg(null);
-    setAiStatusMessage('AI Vision: Detecting face geometry and head contours...');
-
-    try {
-      setOriginalFaceUrl(faceImageData);
-
-      // Cache image for instant slider tuning
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise((res, rej) => {
-        img.onload = () => res(img);
-        img.onerror = e => rej(e);
-        img.src = faceImageData;
-      });
-      loadedImageRef.current = img;
-
-      setAiStatusMessage('AI Segmentation: Segmenting face & hair, removing messy background & clothing...');
-
-      const result = await processPlayerAvatarWithAI(faceImageData, player.name, player.id, {
-        scale: options?.scale ?? faceScale,
-        verticalOffset: options?.verticalOffset ?? verticalOffset,
-        horizontalOffset: options?.horizontalOffset ?? horizontalOffset,
-      });
-
-      setCutoutDataUrl(result.cutoutDataUrl);
-      setSmartAvatarUrl(result.smartAvatarUrl);
-      setDetectedFaceBox(result.detectedFaceBox || null);
-      setAiStatusMessage(null);
-    } catch (err: any) {
-      console.error('[AI Processing] Error:', err);
-      setErrorMsg('Notice: Used client-side face segmentation engine for optimal cutout.');
-      setAiStatusMessage(null);
-    } finally {
-      setIsProcessingAI(false);
-    }
-  };
 
   // Handle local file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,7 +136,7 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_DIM = 900;
+        const MAX_DIM = 1200;
         let width = img.width;
         let height = img.height;
 
@@ -177,14 +153,27 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const rawDataUri = canvas.toDataURL('image/jpeg', 0.90);
-          // Trigger the AI Face Cutout & Uniform pipeline
-          processFaceWithAI(rawDataUri);
+          // Store exact uploaded image untouched
+          const rawDataUri = canvas.toDataURL('image/jpeg', 0.94);
+          setPhotoUrl(rawDataUri);
         }
       };
       img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleApplyUrl = () => {
+    if (!urlInput.trim()) return;
+    setPhotoUrl(urlInput.trim());
+    setShowUrlInput(false);
+    setUrlInput('');
+  };
+
+  const handleClearPhoto = () => {
+    setPhotoUrl('');
+    setCutoutDataUrl('');
+    setCutoutStatus(null);
   };
 
   const handleSave = async () => {
@@ -193,28 +182,30 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
     try {
       await onSave(
         player.id,
-        smartAvatarUrl.trim(),
+        photoUrl.trim(),
         { primary: primaryColor, secondary: secondaryColor, collar: collarColor },
         preferredScenario
       );
-      setSuccessMsg('Standardized Uniform Avatar saved & synced to Supabase database!');
+      setSuccessMsg('Original player photo & custom apparel saved successfully!');
       setTimeout(() => {
         setSuccessMsg(null);
         onClose();
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to save standardized avatar to Supabase.');
+      setErrorMsg(err.message || 'Failed to save player photo to database.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Preview player with active standardized uniform
+  // Live preview player instance
   const previewPlayer: Player = {
     ...player,
-    photoUrl: smartAvatarUrl.trim() || undefined,
-    smartAvatarUrl: smartAvatarUrl.trim() || undefined,
-    avatarSeed: smartAvatarUrl.trim() || player.avatarSeed,
+    photoUrl: photoUrl.trim() || undefined,
+    smartAvatarUrl: photoUrl.trim() || undefined,
+    avatarSeed: photoUrl.trim() || player.avatarSeed,
+    customShirtColors: { primary: primaryColor, secondary: secondaryColor, collar: collarColor },
+    preferredScenario,
   };
 
   return (
@@ -223,17 +214,17 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-800 bg-neutral-950">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-inner">
-              <Scissors className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shadow-inner">
+              <Camera className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-black uppercase tracking-widest text-blue-400">
-                  AI Face Cutout & Uniform Pipeline &mdash; Supabase
+                <span className="text-[10px] font-mono font-black uppercase tracking-widest text-red-400">
+                  Player Photo & Custom Darts Apparel
                 </span>
               </div>
               <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight">
-                Player Headshot Studio: {player.name}
+                {player.name} &mdash; Official Roster Photo
               </h3>
             </div>
           </div>
@@ -248,22 +239,23 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
 
         {/* Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Rules Banner */}
-          <div className="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/60 flex items-start gap-3 text-xs">
-            <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          {/* Authentic Original Photo Policy Banner */}
+          <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-start gap-3 text-xs">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <div>
-              <strong className="text-blue-200 font-bold block mb-0.5">
-                Precise Face Cutout Logic & Uniform Compositing
+              <strong className="text-emerald-300 font-bold block mb-0.5">
+                Authentic Original Upload System
               </strong>
               <p className="text-neutral-300 leading-relaxed">
-                The AI segments <strong>only the player's face</strong>, leaving behind original messy backgrounds and clothing. It then seamlessly places, blends, and composites the isolated face onto the standard league uniform (white shirt, blue tie, black blazer, flat gray background) while strictly preserving authentic facial features, skin tone, and expression.
+                When you upload a photo, that <strong>exact uploaded image is stored and displayed completely untouched</strong> across player cards, standings, profile pages, and match scoring screens.
               </p>
             </div>
           </div>
 
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
-              {errorMsg}
+            <div className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{errorMsg}</span>
             </div>
           )}
 
@@ -274,196 +266,71 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
             </div>
           )}
 
-          {/* AI Processing Status */}
-          {isProcessingAI && (
-            <div className="p-4 rounded-xl bg-blue-950/70 border border-blue-700/80 text-blue-200 text-xs flex items-center gap-3 animate-pulse">
-              <RefreshCw className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
-              <div>
-                <strong className="block font-bold">AI Pipeline in Progress</strong>
-                <span className="text-neutral-300 text-[11px]">
-                  {aiStatusMessage || 'Precisely segmenting face and compositing onto uniform...'}
+          {/* Upload Controls & Image Preview Section */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            {/* Left: Upload and Original Image (7 cols) */}
+            <div className="md:col-span-7 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  Uploaded Player Photo (Untouched)
                 </span>
-              </div>
-            </div>
-          )}
-
-          {/* 3-Step Cutout & Compositing Visual Inspection */}
-          <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
-                <UserCheck className="w-4 h-4 text-blue-400" />
-                <span>Segmentation & Compositing Breakdown</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowAdjustments(!showAdjustments)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 text-[11px] font-semibold transition-colors"
-              >
-                <Sliders className="w-3.5 h-3.5 text-blue-400" />
-                <span>{showAdjustments ? 'Hide Sliders' : 'Fine-Tune Alignment'}</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-              {/* Step 1: Uploaded Photo */}
-              <div className="flex flex-col items-center text-center p-3 rounded-xl bg-neutral-900/90 border border-neutral-800">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 mb-2">
-                  1. Original Source Photo
-                </span>
-                <div className="w-28 h-28 rounded-xl overflow-hidden bg-neutral-950 border border-neutral-700 flex items-center justify-center">
-                  {originalFaceUrl ? (
-                    <img
-                      src={originalFaceUrl}
-                      alt="Source"
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-[10px] text-neutral-500 font-mono">No photo yet</span>
-                  )}
-                </div>
-                <span className="text-[10px] text-neutral-400 mt-2">
-                  Includes messy background & original clothing
-                </span>
-              </div>
-
-              {/* Step 2: Isolated Face Cutout */}
-              <div className="flex flex-col items-center text-center p-3 rounded-xl bg-neutral-900/90 border border-blue-900/40">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-400 mb-2">
-                  2. Isolated Face Cutout
-                </span>
-                {/* Checkerboard transparency background */}
-                <div
-                  className="w-28 h-28 rounded-xl overflow-hidden border border-blue-600/40 flex items-center justify-center relative"
-                  style={{
-                    backgroundImage:
-                      'linear-gradient(45deg, #1e1e1e 25%, transparent 25%), linear-gradient(-45deg, #1e1e1e 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e1e1e 75%), linear-gradient(-45deg, transparent 75%, #1e1e1e 75%)',
-                    backgroundSize: '12px 12px',
-                    backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
-                    backgroundColor: '#111',
-                  }}
-                >
-                  {cutoutDataUrl ? (
-                    <img
-                      src={cutoutDataUrl}
-                      alt="Cutout"
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-contain filter drop-shadow-md"
-                    />
-                  ) : (
-                    <span className="text-[10px] text-blue-400/80 font-mono">AI Cutout</span>
-                  )}
-                </div>
-                <span className="text-[10px] text-emerald-400 font-semibold mt-2">
-                  ✓ Background & clothes dropped
-                </span>
-              </div>
-
-              {/* Step 3: Standard Uniform Composite */}
-              <div className="flex flex-col items-center text-center p-3 rounded-xl bg-neutral-900/90 border border-neutral-800">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 mb-2">
-                  3. Standard Uniform Composite
-                </span>
-                <div className="relative">
-                  <BearAvatar player={previewPlayer} size="xl" className="ring-2 ring-emerald-500/50 shadow-xl" />
-                  <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white font-mono font-black text-[9px] shadow">
-                    ACTIVE
-                  </span>
-                </div>
-                <span className="text-[10px] text-neutral-300 mt-2 font-medium">
-                  White shirt · Blue tie · Black blazer · Gray bg
-                </span>
-              </div>
-            </div>
-
-            {/* Fine-Tuning Alignment Controls (Sliders) */}
-            {showAdjustments && (
-              <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-700/80 space-y-3 mt-3 animate-fade-in">
-                <div className="flex items-center justify-between text-xs font-bold text-neutral-200">
-                  <span>Fine-Tune Face Cutout Placement & Scale</span>
+                {photoUrl && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setFaceScale(1.0);
-                      setVerticalOffset(0);
-                      setHorizontalOffset(0);
-                      reCompositeWithAdjustments(1.0, 0, 0);
-                    }}
-                    className="text-[11px] text-neutral-400 hover:text-white underline font-normal"
+                    onClick={handleClearPhoto}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-400 hover:text-red-300"
                   >
-                    Reset Defaults
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Photo</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Photo Display Frame */}
+              <div className="relative aspect-square max-h-72 w-full rounded-2xl overflow-hidden bg-neutral-950 border border-neutral-800 flex items-center justify-center group shadow-inner">
+                {photoUrl ? (
+                  <img
+                    src={photoUrl}
+                    alt={player.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover object-center"
+                  />
+                ) : (
+                  <div className="text-center p-6 space-y-3">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-500">
+                      <Camera className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-neutral-300">No Photo Uploaded</p>
+                      <p className="text-xs text-neutral-500 mt-1">
+                        Currently using default {player.avatarBearType || 'grizzly'} mascot avatar
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload action overlay */}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-4">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload New Photo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlInput(!showUrlInput)}
+                    className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    <span>Image URL</span>
                   </button>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <label className="block text-[11px] text-neutral-400 mb-1">
-                      Face Scale: <strong className="text-white">{Math.round(faceScale * 100)}%</strong>
-                    </label>
-                    <input
-                      type="range"
-                      min="0.75"
-                      max="1.35"
-                      step="0.02"
-                      value={faceScale}
-                      onChange={e => {
-                        const val = parseFloat(e.target.value);
-                        setFaceScale(val);
-                        reCompositeWithAdjustments(val, verticalOffset, horizontalOffset);
-                      }}
-                      className="w-full accent-blue-500 cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-neutral-400 mb-1">
-                      Vertical Position: <strong className="text-white">{verticalOffset}px</strong>
-                    </label>
-                    <input
-                      type="range"
-                      min="-50"
-                      max="50"
-                      step="2"
-                      value={verticalOffset}
-                      onChange={e => {
-                        const val = parseInt(e.target.value, 10);
-                        setVerticalOffset(val);
-                        reCompositeWithAdjustments(faceScale, val, horizontalOffset);
-                      }}
-                      className="w-full accent-blue-500 cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-neutral-400 mb-1">
-                      Horizontal Position: <strong className="text-white">{horizontalOffset}px</strong>
-                    </label>
-                    <input
-                      type="range"
-                      min="-30"
-                      max="30"
-                      step="2"
-                      value={horizontalOffset}
-                      onChange={e => {
-                        const val = parseInt(e.target.value, 10);
-                        setHorizontalOffset(val);
-                        reCompositeWithAdjustments(faceScale, verticalOffset, val);
-                      }}
-                      className="w-full accent-blue-500 cursor-pointer"
-                    />
-                  </div>
-                </div>
               </div>
-            )}
-          </div>
 
-          {/* Upload & Action Controls */}
-          <div className="space-y-4">
-            {/* 1. Upload Photo Button */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-300 mb-2">
-                1. Upload Player Photo File (Auto-Segments Face & Cuts Out Background)
-              </label>
+              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -471,123 +338,235 @@ export const PlayerPhotoModal: React.FC<PlayerPhotoModalProps> = ({
                 onChange={handleFileUpload}
                 className="hidden"
               />
-              <button
-                type="button"
-                disabled={isProcessingAI}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-neutral-950 hover:bg-neutral-800 border border-dashed border-neutral-700 hover:border-blue-500 text-neutral-300 hover:text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
-              >
-                <Upload className="w-4 h-4 text-blue-400" />
-                <span>Select & Upload Photo (Auto-Segmented & Fitted to Uniform)</span>
-              </button>
-            </div>
 
-            {/* 2. Direct Web URL with Re-Cutout Button */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-300 mb-2">
-                2. Or Enter Image Web URL
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Link className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              {/* URL Input Form */}
+              {showUrlInput && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-neutral-950 border border-neutral-800">
                   <input
                     type="url"
-                    value={originalFaceUrl}
-                    onChange={e => setOriginalFaceUrl(e.target.value)}
                     placeholder="https://example.com/player-photo.jpg"
-                    className="w-full pl-10 pr-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 font-mono"
+                    value={urlInput}
+                    onChange={e => setUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-red-500"
                   />
+                  <button
+                    type="button"
+                    onClick={handleApplyUrl}
+                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+                  >
+                    Apply
+                  </button>
                 </div>
+              )}
+
+              {/* Upload Button Row */}
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  disabled={!originalFaceUrl || isProcessingAI}
-                  onClick={() => processFaceWithAI(originalFaceUrl)}
-                  className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold shrink-0 border border-neutral-700 flex items-center gap-1.5 transition-colors disabled:opacity-40"
-                  title="Run AI Face Cutout & Uniform Pipeline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-colors"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Run Cutout</span>
+                  <Upload className="w-4 h-4" />
+                  <span>Choose Photo From Device</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-neutral-700"
+                  title="Enter Image URL"
+                >
+                  <LinkIcon className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* 3. Preset Standard Uniform Avatars */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-300 mb-2">
-                3. Or Pick from Pre-Rendered Standard Uniform Avatars
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {PRESET_STANDARDIZED_AVATARS.map((preset, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setSmartAvatarUrl(preset.url);
-                      setOriginalFaceUrl(preset.url);
-                      setCutoutDataUrl('');
-                    }}
-                    className={`relative rounded-xl overflow-hidden aspect-square border-2 transition-all p-1 bg-neutral-950 text-left ${
-                      smartAvatarUrl === preset.url
-                        ? 'border-blue-500 ring-2 ring-blue-500/40 shadow-lg shadow-blue-950/50'
-                        : 'border-neutral-800 hover:border-neutral-600 opacity-80 hover:opacity-100'
-                    }`}
-                  >
-                    <img
-                      src={preset.url}
-                      alt={preset.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover rounded-lg"
-                    />
-                    <div className="absolute inset-x-1 bottom-1 bg-neutral-950/85 backdrop-blur-xs p-1 text-[9px] font-bold text-neutral-300 truncate rounded-b-lg">
-                      {preset.name}
+            {/* Right: Live League Avatar Preview & Dynamic Face Cutout (5 cols) */}
+            <div className="md:col-span-5 space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                Live Standings & Profile Avatar
+              </span>
+
+              {/* Avatar Previews in context */}
+              <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-4">
+                <div className="flex items-center gap-4">
+                  <BearAvatar player={previewPlayer} size="xl" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-black text-white truncate">{previewPlayer.name}</div>
+                    <div className="text-xs text-red-400 font-bold">"{previewPlayer.nickname}"</div>
+                    <div className="text-[10px] text-neutral-400 font-mono mt-1">
+                      {photoUrl ? 'Custom Original Photo' : 'Mascot Badge'}
                     </div>
-                  </button>
-                ))}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400">
+                  <span>Standings scale:</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-center gap-1">
+                      <BearAvatar player={previewPlayer} size="sm" />
+                      <span className="text-[9px] font-mono">Table</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <BearAvatar player={previewPlayer} size="md" />
+                      <span className="text-[9px] font-mono">Match</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <BearAvatar player={previewPlayer} size="lg" />
+                      <span className="text-[9px] font-mono">Profile</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic News Face Cutout Engine Status */}
+              <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
+                    <Scissors className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Dynamic News Face Cutout</span>
+                  </span>
+                  {isExtractingCutout ? (
+                    <span className="flex items-center gap-1 text-[10px] font-mono text-blue-400 animate-pulse">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Segmenting
+                    </span>
+                  ) : cutoutDataUrl ? (
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                      ✓ Isolated
+                    </span>
+                  ) : null}
+                </div>
+
+                {photoUrl ? (
+                  <div className="flex items-center gap-3">
+                    {/* Cutout preview on transparent checkerboard */}
+                    <div
+                      className="w-16 h-20 rounded-xl overflow-hidden border border-neutral-700 bg-neutral-800 flex items-center justify-center shrink-0"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(45deg, #1c1c1c 25%, transparent 25%), linear-gradient(-45deg, #1c1c1c 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1c1c1c 75%), linear-gradient(-45deg, transparent 75%, #1c1c1c 75%)',
+                        backgroundSize: '10px 10px',
+                        backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
+                      }}
+                      title="Isolated Face Cutout (Transparent PNG)"
+                    >
+                      {cutoutDataUrl ? (
+                        <img
+                          src={cutoutDataUrl}
+                          alt="Face Cutout"
+                          className="w-full h-full object-contain filter drop-shadow"
+                        />
+                      ) : (
+                        <UserCheck className="w-6 h-6 text-neutral-500 animate-pulse" />
+                      )}
+                    </div>
+
+                    <div className="text-[11px] text-neutral-400 leading-snug">
+                      <p className="text-neutral-200 font-semibold mb-0.5">
+                        Clean Facial Segmentation
+                      </p>
+                      <p className="text-neutral-400">
+                        {cutoutStatus || 'The AI cleanly isolates facial boundaries so action news cards (throwing, crowd celebration) feature your face seamlessly without altering your main avatar.'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-neutral-500">
+                    Upload a photo to automatically generate a high-resolution face cutout for dynamic event scenes.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Custom Darts Apparel Color Picker (Strictly Zero Green) */}
+          <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-red-500" />
+                <span>Custom Darts Apparel Palette</span>
+              </h4>
+              <span className="text-[10px] font-mono text-red-400 font-bold uppercase">
+                ★ League Rule: Strictly Zero Green
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[11px] text-neutral-400 font-semibold mb-1">
+                  Primary Jersey Color
+                </label>
+                <select
+                  value={primaryColor}
+                  onChange={e => setPrimaryColor(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500"
+                >
+                  {SHIRT_COLORS.map(c => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-neutral-400 font-semibold mb-1">
+                  Secondary Accent Color
+                </label>
+                <select
+                  value={secondaryColor}
+                  onChange={e => setSecondaryColor(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500"
+                >
+                  {SHIRT_COLORS.map(c => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-neutral-400 font-semibold mb-1">
+                  Preferred Action Scenario
+                </label>
+                <select
+                  value={preferredScenario}
+                  onChange={e => setPreferredScenario(e.target.value as ScenarioPreset)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500"
+                >
+                  <option value="throwing">Throwing at Board</option>
+                  <option value="celebration">Crowd Celebration</option>
+                  <option value="disappointment">Hands on Head</option>
+                  <option value="cigarette">Smoke Break Lounge</option>
+                  <option value="trophy">Championship Trophy</option>
+                </select>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer Actions */}
         <div className="p-4 sm:p-5 border-t border-neutral-800 bg-neutral-950 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-neutral-400 hover:text-white text-xs font-bold uppercase tracking-wider"
-            >
-              Cancel
-            </button>
-            {smartAvatarUrl && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSmartAvatarUrl('');
-                  setCutoutDataUrl('');
-                }}
-                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-red-400 text-xs font-bold transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear</span>
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white font-bold text-xs transition-colors"
+          >
+            Cancel
+          </button>
 
           <button
             type="button"
-            disabled={isSaving || isProcessingAI}
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-950/40 transition-all disabled:opacity-50"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/50 transition-all disabled:opacity-50"
           >
             {isSaving ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Storing in Supabase...</span>
+                <span>Saving to Supabase...</span>
               </>
             ) : (
               <>
                 <Check className="w-4 h-4" />
-                <span>Save Standardized Avatar to Supabase</span>
+                <span>Save Untouched Photo</span>
               </>
             )}
           </button>

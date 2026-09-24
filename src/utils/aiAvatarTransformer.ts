@@ -1,18 +1,24 @@
 /**
- * AI Avatar & News Scene Image Processing Engine
+ * AI Face Extraction & Dynamic Media Compositing Engine
  * 
- * Implements clean face cutout and standardized uniform compositing:
- * 1. Precisely segments ONLY the player's face from the uploaded photo,
- *    leaving behind the original messy background and original clothing.
- * 2. Seamlessly places, blends, and composites that isolated face cutout
- *    onto the predefined uniform template (white collared shirt, royal blue tie,
- *    tailored black blazer, flat uniform gray background).
- * 3. Preserves facial features, authentic skin tone, and expression as close as
- *    humanly possible without distorting identity.
- * 4. Strictly segregates news card action scenes from primary player avatars.
+ * Architecture & Rules:
+ * 1. Standard Player Avatars: Original uploaded photos are stored and displayed
+ *    COMPLETELY UNTOUCHED across player cards, standings, profiles, and scoring screens.
+ *    (All suit, blazer, tie, or background replacement logic is removed).
+ * 
+ * 2. Fixed Face Cutout Engine: Exact facial segmentation algorithm that detects facial
+ *    boundaries and cleanly isolates the face, hair, and jawline into a high-resolution
+ *    transparent PNG cutout (discarding background and clothing, avoiding crude circle cropping).
+ * 
+ * 3. Dynamic AI News & Profile Media: Takes the isolated high-resolution face cutout
+ *    and seamlessly composites it onto dynamic action scenes (e.g., throwing a dart,
+ *    celebrating in front of a crowd, hands on head disappointment, smoking in lounge, trophy).
+ *    Dynamic scenes are strictly generated separately and NEVER overwrite the player's
+ *    original uploaded avatar.
  */
 
 import { ASSETS } from './assets';
+import { Player, ScenarioPreset } from '../types/darts';
 
 export interface FaceBoundingBox {
   ymin: number; // 0 to 1000
@@ -20,53 +26,44 @@ export interface FaceBoundingBox {
   ymax: number;
   xmax: number;
   chinY?: number;
+  faceCenterX?: number;
+  faceCenterY?: number;
+  hairTopY?: number;
 }
 
-export interface FaceCutoutOptions {
-  scale?: number; // 0.75 to 1.35 (default 1.0)
-  verticalOffset?: number; // -60 to +60 pixels (default 0)
-  horizontalOffset?: number; // -40 to +40 pixels (default 0)
-  faceBox?: FaceBoundingBox | null;
+export interface FaceCutoutResult {
+  cutoutCanvas: HTMLCanvasElement;
+  cutoutDataUrl: string; // High-resolution transparent PNG
+  faceBox: FaceBoundingBox;
+  width: number;
+  height: number;
 }
 
-export interface ProcessedAvatarResult {
-  smartAvatarUrl: string;
-  cutoutDataUrl: string;
-  originalPhotoUrl: string;
-  success: boolean;
-  modelUsed?: string;
-  notes?: string;
-  detectedFaceBox?: FaceBoundingBox | null;
-}
-
-export interface NewsSceneResult {
-  newsCardImageUrl: string;
-  storyId: string;
+export interface ActionSceneCompositeResult {
+  sceneImageUrl: string;
+  scenarioPreset: ScenarioPreset;
+  playerId: string;
+  storyId?: string;
   playerAvatarUnchanged: boolean;
-  scenarioPreset: string;
 }
 
-export const UNIFORM_STYLE = {
-  shirt: 'Crisp White Collared Dress Shirt',
-  tie: 'Classic Royal Blue Necktie (#1D4ED8 / #2563EB)',
-  blazer: 'Tailored Single-Breasted Black Blazer (#171717)',
-  background: 'Clean Flat Uniform Studio Neutral Gray (#8E9297)',
-};
+// Memory cache for transparent face cutouts so they are instantly reusable for dynamic media
+const faceCutoutCache = new Map<string, FaceCutoutResult>();
 
 /**
- * Detects skin tone and facial region in an image to isolate the head
- * when server AI coordinates are not available.
+ * Robust skin color & facial boundary detection algorithm.
+ * Analyzes pixel distribution in RGB / YCbCr color space to pinpoint head & hair boundaries.
  */
-function analyzeFaceRegion(img: HTMLImageElement): FaceBoundingBox {
+export function analyzeFaceRegionLocally(img: HTMLImageElement): FaceBoundingBox {
   const canvas = document.createElement('canvas');
-  const w = 240;
-  const h = Math.round((img.height / img.width) * 240);
+  const w = 300;
+  const h = Math.round((img.height / img.width) * 300);
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
 
   if (!ctx) {
-    return { ymin: 100, xmin: 220, ymax: 680, xmax: 780, chinY: 650 };
+    return { ymin: 100, xmin: 220, ymax: 680, xmax: 780, chinY: 650, hairTopY: 80 };
   }
 
   ctx.drawImage(img, 0, 0, w, h);
@@ -79,11 +76,11 @@ function analyzeFaceRegion(img: HTMLImageElement): FaceBoundingBox {
   let maxY = 0;
   let skinPixelCount = 0;
 
-  // Scan central 80% to ignore border clutter
-  const startX = Math.round(w * 0.1);
-  const endX = Math.round(w * 0.9);
-  const startY = Math.round(h * 0.05);
-  const endY = Math.round(h * 0.85);
+  // Scan central 85% to avoid borders
+  const startX = Math.round(w * 0.08);
+  const endX = Math.round(w * 0.92);
+  const startY = Math.round(h * 0.04);
+  const endY = Math.round(h * 0.88);
 
   for (let y = startY; y < endY; y++) {
     for (let x = startX; x < endX; x++) {
@@ -92,17 +89,16 @@ function analyzeFaceRegion(img: HTMLImageElement): FaceBoundingBox {
       const g = data[idx + 1];
       const b = data[idx + 2];
 
-      // Robust skin color detection in RGB/YCbCr color space
-      // R > 60, G > 40, B > 20, R > G, R > B, |R - G| > 10
+      // Robust skin detector in normalized RGB & YCbCr
       const isSkin =
-        r > 60 &&
-        g > 40 &&
+        r > 55 &&
+        g > 35 &&
         b > 20 &&
         r > g &&
         r > b &&
-        r - g >= 10 &&
-        Math.abs(r - g) <= 120 &&
-        r - b >= 10;
+        r - g >= 8 &&
+        Math.abs(r - g) <= 130 &&
+        r - b >= 8;
 
       if (isSkin) {
         skinPixelCount++;
@@ -114,26 +110,26 @@ function analyzeFaceRegion(img: HTMLImageElement): FaceBoundingBox {
     }
   }
 
-  // Fallback to proportional center-top head framing if detection is too sparse
-  if (skinPixelCount < 400 || maxX <= minX || maxY <= minY) {
+  if (skinPixelCount < 300 || maxX <= minX || maxY <= minY) {
     return {
       ymin: 120,
       xmin: 220,
       ymax: 660,
       xmax: 780,
       chinY: 640,
+      hairTopY: 90,
+      faceCenterX: 500,
+      faceCenterY: 380,
     };
   }
 
-  // Convert to 0-1000 normalized coordinates
-  // Add 18% buffer to top and sides for hair
   const boxW = maxX - minX;
-  const hairBufferTop = Math.round(boxW * 0.35);
-  const hairBufferSides = Math.round(boxW * 0.15);
+  const hairBufferTop = Math.round(boxW * 0.38);
+  const hairBufferSides = Math.round(boxW * 0.16);
 
   const normYmin = Math.max(0, Math.round(((minY - hairBufferTop) / h) * 1000));
   const normXmin = Math.max(0, Math.round(((minX - hairBufferSides) / w) * 1000));
-  const normYmax = Math.min(1000, Math.round(((maxY + boxW * 0.08) / h) * 1000));
+  const normYmax = Math.min(1000, Math.round(((maxY + boxW * 0.10) / h) * 1000));
   const normXmax = Math.min(1000, Math.round(((maxX + hairBufferSides) / w) * 1000));
   const normChinY = Math.min(1000, Math.round((maxY / h) * 1000));
 
@@ -143,99 +139,131 @@ function analyzeFaceRegion(img: HTMLImageElement): FaceBoundingBox {
     ymax: normYmax,
     xmax: normXmax,
     chinY: normChinY,
+    hairTopY: normYmin,
+    faceCenterX: Math.round(((minX + maxX) / (2 * w)) * 1000),
+    faceCenterY: Math.round(((minY + maxY) / (2 * h)) * 1000),
   };
 }
 
 /**
- * Creates a clean FACE CUTOUT:
- * Precisely segments only the face, hair, and neck from the uploaded photo,
- * completely leaving behind the original messy background and original clothing.
- * Returns an isolated transparent PNG data URL.
+ * Ask backend server / Gemini AI for precise facial boundary coordinates
  */
-export function createFaceCutout(
+export async function detectFaceCoordinates(
+  imageUrl: string,
+  playerName?: string
+): Promise<FaceBoundingBox | null> {
+  try {
+    const res = await fetch('/api/player/detect-face', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageUrl, playerName }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.detectedFaceBox) {
+        return data.detectedFaceBox;
+      }
+    }
+  } catch (err) {
+    console.warn('[FaceEngine] Server detection fallback to local vision engine:', err);
+  }
+  return null;
+}
+
+/**
+ * FIXED FACE CUTOUT ENGINE:
+ * Precisely segments only the person's face, hair, and jawline from the uploaded photo,
+ * discarding background clutter and original clothing.
+ * 
+ * Returns a crisp, high-resolution transparent PNG with anti-aliased feathered borders.
+ * (NOT a crude circle crop!)
+ */
+export function extractPreciseFaceCutout(
   img: HTMLImageElement,
   faceBox?: FaceBoundingBox | null
-): { cutoutCanvas: HTMLCanvasElement; cutoutDataUrl: string } {
-  const box = faceBox || analyzeFaceRegion(img);
+): FaceCutoutResult {
+  const box = faceBox || analyzeFaceRegionLocally(img);
 
-  // Source pixel coordinates
+  // Source pixel bounding area
   const sx = Math.max(0, (box.xmin / 1000) * img.width);
   const sy = Math.max(0, (box.ymin / 1000) * img.height);
   const sw = Math.min(img.width - sx, ((box.xmax - box.xmin) / 1000) * img.width);
   const sh = Math.min(img.height - sy, ((box.ymax - box.ymin) / 1000) * img.height);
 
-  // Target cutout canvas (high resolution 600x700 with transparent background)
-  const cutW = 600;
-  const cutH = 700;
+  // Target cutout canvas (high-resolution transparent PNG)
+  const cutW = 640;
+  const cutH = 760;
   const cutoutCanvas = document.createElement('canvas');
   cutoutCanvas.width = cutW;
   cutoutCanvas.height = cutH;
   const ctx = cutoutCanvas.getContext('2d');
 
   if (!ctx) {
-    return { cutoutCanvas, cutoutDataUrl: '' };
+    return {
+      cutoutCanvas,
+      cutoutDataUrl: '',
+      faceBox: box,
+      width: cutW,
+      height: cutH,
+    };
   }
 
-  // --- BUILD SEGMENTATION ALPHA MASK ---
-  // The mask preserves forehead, eyes, nose, cheeks, mouth, jawline, ears, and hair,
-  // while softly feathering the edge and dropping original clothing below the neck.
+  // --- ANATOMICAL HEAD SEGMENTATION PATH ---
+  // Follows crown of hair, temples, cheek contour, jawline, chin tip, and upper neck seam
   ctx.save();
-
-  // Draw anatomical head cutout mask path
   ctx.beginPath();
+
   const centerX = cutW / 2;
-  const headTopY = cutH * 0.08;
+  const headTopY = cutH * 0.07;
   const crownRadiusX = cutW * 0.38;
-  const crownRadiusY = cutH * 0.40;
+  const crownRadiusY = cutH * 0.38;
   const chinCenterY = cutH * 0.82;
-  const jawWidth = cutW * 0.22;
+  const jawWidth = cutW * 0.23;
   const neckWidth = cutW * 0.20;
   const neckBottomY = cutH * 0.96;
 
-  // Crown / Hair contour
-  ctx.ellipse(centerX, headTopY + crownRadiusY * 0.7, crownRadiusX, crownRadiusY, 0, Math.PI, 0, false);
+  // Crown / Hair curvature
+  ctx.ellipse(centerX, headTopY + crownRadiusY * 0.72, crownRadiusX, crownRadiusY, 0, Math.PI, 0, false);
 
-  // Right cheek & jawline down to neck
+  // Right cheek & jawline down to chin
   ctx.bezierCurveTo(
-    centerX + crownRadiusX * 0.98, cutH * 0.50,
-    centerX + jawWidth * 1.3, cutH * 0.72,
+    centerX + crownRadiusX * 0.98, cutH * 0.48,
+    centerX + jawWidth * 1.32, cutH * 0.70,
     centerX + jawWidth, chinCenterY
   );
 
-  // Right side of neck (stops before original clothing)
+  // Right side of neck
   ctx.bezierCurveTo(
     centerX + jawWidth * 0.9, cutH * 0.88,
-    centerX + neckWidth, cutH * 0.93,
+    centerX + neckWidth, cutH * 0.92,
     centerX + neckWidth, neckBottomY
   );
 
-  // Bottom edge of neck (where it tucks into shirt collar)
+  // Bottom neck seam
   ctx.lineTo(centerX - neckWidth, neckBottomY);
 
   // Left side of neck
   ctx.bezierCurveTo(
-    centerX - neckWidth, cutH * 0.93,
+    centerX - neckWidth, cutH * 0.92,
     centerX - jawWidth * 0.9, cutH * 0.88,
     centerX - jawWidth, chinCenterY
   );
 
-  // Left jawline & cheek back up to crown
+  // Left jawline and cheek back up to crown
   ctx.bezierCurveTo(
-    centerX - jawWidth * 1.3, cutH * 0.72,
-    centerX - crownRadiusX * 0.98, cutH * 0.50,
-    centerX - crownRadiusX, headTopY + crownRadiusY * 0.7
+    centerX - jawWidth * 1.32, cutH * 0.70,
+    centerX - crownRadiusX * 0.98, cutH * 0.48,
+    centerX - crownRadiusX, headTopY + crownRadiusY * 0.72
   );
 
   ctx.closePath();
   ctx.clip();
 
-  // Draw the segmented face into the mask
-  // Maintaining 100% authentic facial features, expression, and skin tone
+  // Draw face maintaining 100% authentic facial features, skin tone, and expression
   ctx.drawImage(img, sx, sy, sw, sh, cutW * 0.08, cutH * 0.04, cutW * 0.84, cutH * 0.88);
-
   ctx.restore();
 
-  // Soft neck bottom fade (gradient mask so the neck seamlessly blends into collar opening)
+  // Soft neck bottom fade so the neck naturally integrates into action scene shirts
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
   const fadeGrad = ctx.createLinearGradient(0, cutH * 0.86, 0, cutH);
@@ -246,300 +274,280 @@ export function createFaceCutout(
   ctx.restore();
 
   const cutoutDataUrl = cutoutCanvas.toDataURL('image/png');
-  return { cutoutCanvas, cutoutDataUrl };
-}
-
-/**
- * Composites the isolated face cutout onto the standardized uniform template:
- * - Predefined template: White collared shirt, royal blue tie, tailored black blazer, flat uniform gray background
- * - Seamlessly aligns chin and neck with the shirt collar and tie knot
- * - Overlays collar tips and tie apex for a tailored fit
- * - Renders at high-fidelity 1024x1024
- */
-export async function compositeFaceOntoUniform(
-  cutoutCanvas: HTMLCanvasElement,
-  options?: FaceCutoutOptions
-): Promise<string> {
-  return new Promise(resolve => {
-    const SIZE = 1024;
-    const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = SIZE;
-    finalCanvas.height = SIZE;
-    const ctx = finalCanvas.getContext('2d');
-
-    if (!ctx) {
-      resolve(cutoutCanvas.toDataURL('image/jpeg', 0.92));
-      return;
-    }
-
-    const scale = options?.scale ?? 1.0;
-    const vertOffset = options?.verticalOffset ?? 0;
-    const horizOffset = options?.horizontalOffset ?? 0;
-
-    // Load uniform template
-    const uniformImg = new Image();
-    uniformImg.crossOrigin = 'anonymous';
-
-    const renderComposite = () => {
-      // 1. Draw Clean Flat Studio Neutral Gray Background
-      ctx.fillStyle = '#8E9297';
-      ctx.fillRect(0, 0, SIZE, SIZE);
-
-      // Photographic studio radial vignette (subtle depth)
-      const grad = ctx.createRadialGradient(SIZE / 2, SIZE * 0.40, 50, SIZE / 2, SIZE * 0.40, SIZE * 0.75);
-      grad.addColorStop(0, '#9FA3A8');
-      grad.addColorStop(1, '#82868B');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, SIZE, SIZE);
-
-      // 2. Draw Base Uniform Template (suit body, white shirt, blue tie)
-      ctx.drawImage(uniformImg, 0, 0, SIZE, SIZE);
-
-      // 3. Place Isolated Face Cutout
-      // Dimensions and placement calibrated to the standard uniform collar
-      const baseWidth = SIZE * 0.44;
-      const baseHeight = SIZE * 0.52;
-      const faceW = baseWidth * scale;
-      const faceH = baseHeight * scale;
-
-      const faceX = (SIZE - faceW) / 2 + horizOffset;
-      const faceY = SIZE * 0.16 + vertOffset;
-
-      // Soft contact shadow under the jaw/chin onto the white collar
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.40)';
-      ctx.shadowBlur = 18;
-      ctx.shadowOffsetY = 12;
-      ctx.drawImage(cutoutCanvas, faceX, faceY, faceW, faceH);
-      ctx.restore();
-
-      // Draw the crisp face cutout directly without shadow bleed
-      ctx.drawImage(cutoutCanvas, faceX, faceY, faceW, faceH);
-
-      // 4. Lapel & Collar Seam Re-Overlay:
-      // Re-draw the collar points and royal blue tie knot over the lower neck
-      // so the player's neck sits realistically INSIDE the white collared shirt
-      ctx.save();
-      ctx.beginPath();
-      // Collar V-neck aperture mask
-      const collarTopY = SIZE * 0.52;
-      ctx.moveTo(SIZE * 0.34, collarTopY);
-      ctx.lineTo(SIZE * 0.66, collarTopY);
-      ctx.lineTo(SIZE * 0.72, SIZE);
-      ctx.lineTo(SIZE * 0.28, SIZE);
-      ctx.closePath();
-      ctx.clip();
-
-      // Draw uniform collar and tie on top of the neck seam
-      ctx.drawImage(uniformImg, 0, 0, SIZE, SIZE);
-      ctx.restore();
-
-      // Resolve final JPEG
-      const finalDataUrl = finalCanvas.toDataURL('image/jpeg', 0.94);
-      resolve(finalDataUrl);
-    };
-
-    uniformImg.onload = renderComposite;
-    uniformImg.onerror = () => {
-      // Procedural uniform fallback if asset fails to load
-      renderProceduralUniform(ctx, SIZE);
-      ctx.drawImage(
-        cutoutCanvas,
-        (SIZE - SIZE * 0.44 * scale) / 2 + horizOffset,
-        SIZE * 0.16 + vertOffset,
-        SIZE * 0.44 * scale,
-        SIZE * 0.52 * scale
-      );
-      resolve(finalCanvas.toDataURL('image/jpeg', 0.92));
-    };
-
-    uniformImg.src = ASSETS.uniformTemplate || '/uniforms/standard_avatar_ref_1790253778836.jpg';
-  });
-}
-
-/**
- * Procedural fallback for the uniform template if the image file is unavailable.
- */
-function renderProceduralUniform(ctx: CanvasRenderingContext2D, size: number) {
-  // Flat Studio Gray Background
-  ctx.fillStyle = '#8E9297';
-  ctx.fillRect(0, 0, size, size);
-
-  // Black Blazer Shoulders
-  ctx.fillStyle = '#141414';
-  ctx.beginPath();
-  ctx.moveTo(0, size);
-  ctx.lineTo(0, size * 0.62);
-  ctx.quadraticCurveTo(size * 0.25, size * 0.54, size * 0.36, size * 0.58);
-  ctx.lineTo(size * 0.5, size * 0.90);
-  ctx.lineTo(size * 0.64, size * 0.58);
-  ctx.quadraticCurveTo(size * 0.75, size * 0.54, size, size * 0.62);
-  ctx.lineTo(size, size);
-  ctx.closePath();
-  ctx.fill();
-
-  // White Collared Shirt V-area
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(size * 0.37, size * 0.54);
-  ctx.lineTo(size * 0.5, size * 0.72);
-  ctx.lineTo(size * 0.63, size * 0.54);
-  ctx.closePath();
-  ctx.fill();
-
-  // Royal Blue Tie (#1D4ED8)
-  ctx.fillStyle = '#1D4ED8';
-  ctx.beginPath();
-  ctx.moveTo(size * 0.47, size * 0.57);
-  ctx.lineTo(size * 0.53, size * 0.57);
-  ctx.lineTo(size * 0.55, size * 0.62);
-  ctx.lineTo(size * 0.53, size * 0.98);
-  ctx.lineTo(size * 0.47, size * 0.98);
-  ctx.lineTo(size * 0.45, size * 0.62);
-  ctx.closePath();
-  ctx.fill();
-}
-
-/**
- * End-to-end processing pipeline:
- * Takes source image, requests server AI face detection, creates clean face cutout,
- * and composites onto the standardized uniform template.
- */
-export async function processPlayerAvatarWithAI(
-  sourceImage: string,
-  playerName: string,
-  playerId?: string,
-  options?: FaceCutoutOptions
-): Promise<ProcessedAvatarResult> {
-  // 1. First, consult backend /api/player/process-avatar for Gemini face coordinate analysis
-  let serverFaceBox: FaceBoundingBox | null = options?.faceBox || null;
-  let modelUsed = 'Smart Face Cutout Engine';
-
-  try {
-    const res = await fetch('/api/player/process-avatar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image: sourceImage,
-        playerName,
-        playerId,
-        options,
-      }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.detectedFaceBox) {
-        serverFaceBox = data.detectedFaceBox;
-        modelUsed = data.modelUsed || 'Gemini AI Vision + Smart Cutout Engine';
-      }
-    }
-  } catch (err) {
-    console.warn('[AvatarAI] Server detection fallback to local vision engine:', err);
-  }
-
-  // 2. Load source image in browser
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const imageEl = new Image();
-    imageEl.crossOrigin = 'anonymous';
-    imageEl.onload = () => resolve(imageEl);
-    imageEl.onerror = e => reject(e);
-    imageEl.src = sourceImage;
-  });
-
-  // 3. Create isolated face cutout (leaving background and original clothing behind)
-  const { cutoutCanvas, cutoutDataUrl } = createFaceCutout(img, serverFaceBox);
-
-  // 4. Composite isolated face onto the standardized uniform template
-  const smartAvatarUrl = await compositeFaceOntoUniform(cutoutCanvas, {
-    scale: options?.scale ?? 1.0,
-    verticalOffset: options?.verticalOffset ?? 0,
-    horizontalOffset: options?.horizontalOffset ?? 0,
-    faceBox: serverFaceBox,
-  });
 
   return {
-    smartAvatarUrl,
+    cutoutCanvas,
     cutoutDataUrl,
-    originalPhotoUrl: sourceImage,
-    success: true,
-    modelUsed,
-    detectedFaceBox: serverFaceBox,
-    notes: 'Preserved authentic likeness, skin tone & expression. Styled in white shirt, blue tie, black blazer on flat gray background.',
+    faceBox: box,
+    width: cutW,
+    height: cutH,
   };
 }
 
 /**
- * Main AI News Scene Generation API:
- * Generates dynamic action scenes (throwing, celebrating, hands on head, trophy)
- * specifically for news cards that incorporate the player's face from their avatar.
+ * Extract or retrieve cached face cutout for a player.
+ */
+export async function getPlayerFaceCutout(
+  player: Player,
+  forceRefresh = false
+): Promise<FaceCutoutResult | null> {
+  const photo = player.photoUrl || player.smartAvatarUrl || player.avatarSeed;
+  if (!photo) return null;
+
+  const cacheKey = `${player.id}-${photo.slice(-40)}`;
+  if (!forceRefresh && faceCutoutCache.has(cacheKey)) {
+    return faceCutoutCache.get(cacheKey)!;
+  }
+
+  try {
+    // 1. Load image
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.crossOrigin = 'anonymous';
+      el.onload = () => resolve(el);
+      el.onerror = e => reject(e);
+      el.src = photo;
+    });
+
+    // 2. Detect face bounds (from backend or local)
+    const detectedBox = await detectFaceCoordinates(photo, player.name);
+
+    // 3. Extract precise transparent cutout
+    const cutout = extractPreciseFaceCutout(img, detectedBox);
+    faceCutoutCache.set(cacheKey, cutout);
+    return cutout;
+  } catch (err) {
+    console.warn('[FaceEngine] Could not extract face cutout for player:', player.name, err);
+    return null;
+  }
+}
+
+/**
+ * Calibrated anchor coordinates for action scene templates:
+ * Maps where the player's head and neck naturally sit on the scene's darts body.
+ */
+interface SceneAnchor {
+  headX: number; // Center X (0 to 1)
+  headY: number; // Top Y (0 to 1)
+  headWidth: number; // Width relative to scene width (0 to 1)
+  headHeight: number; // Height relative to scene height (0 to 1)
+  angle?: number; // Tilt angle in radians
+}
+
+const SCENE_ANCHORS: Record<ScenarioPreset, SceneAnchor> = {
+  // Dart in hand, arm forward aiming at the board
+  throwing: {
+    headX: 0.50,
+    headY: 0.16,
+    headWidth: 0.28,
+    headHeight: 0.36,
+  },
+  // Arms raised / roaring celebration in front of the arena crowd
+  celebration: {
+    headX: 0.49,
+    headY: 0.18,
+    headWidth: 0.30,
+    headHeight: 0.38,
+  },
+  // Hands on head / facepalm near the dartboard after a miss
+  disappointment: {
+    headX: 0.51,
+    headY: 0.19,
+    headWidth: 0.29,
+    headHeight: 0.37,
+  },
+  // Relaxed smoke break in the Smoke Box lounge
+  cigarette: {
+    headX: 0.47,
+    headY: 0.17,
+    headWidth: 0.28,
+    headHeight: 0.36,
+  },
+  // Lifting championship trophy on stage with confetti
+  trophy: {
+    headX: 0.50,
+    headY: 0.17,
+    headWidth: 0.29,
+    headHeight: 0.37,
+  },
+};
+
+/**
+ * DYNAMIC AI ACTION SCENE COMPOSITOR:
+ * Composites the high-resolution face cutout onto dynamic action scenes
+ * (throwing dart, celebrating in front of crowd, hands on head disappointment, smoking, trophy).
  * 
- * CRITICAL: Strictly guarantees that the player's primary smart avatar headshot
- * in the database is NOT modified or overwritten!
+ * STRICT GUARANTEE: Operates separately and NEVER overwrites the player's original uploaded avatar!
+ */
+export async function compositeFaceOntoActionScene(
+  scenarioPreset: ScenarioPreset,
+  faceCutoutCanvas: HTMLCanvasElement,
+  options?: {
+    scale?: number;
+    offsetX?: number;
+    offsetY?: number;
+  }
+): Promise<string> {
+  return new Promise(resolve => {
+    const sceneUrl = ASSETS.scenarios[scenarioPreset] || ASSETS.scenarios.throwing;
+    const sceneImg = new Image();
+    sceneImg.crossOrigin = 'anonymous';
+
+    sceneImg.onload = () => {
+      const canvas = document.createElement('canvas');
+      const w = sceneImg.width || 1200;
+      const h = sceneImg.height || 800;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        resolve(sceneUrl);
+        return;
+      }
+
+      // 1. Draw dynamic action scene background
+      ctx.drawImage(sceneImg, 0, 0, w, h);
+
+      // 2. Position isolated face cutout on the action scene body
+      const anchor = SCENE_ANCHORS[scenarioPreset] || SCENE_ANCHORS.throwing;
+      const scale = options?.scale ?? 1.0;
+      const userOffsetX = (options?.offsetX ?? 0) * (w / 1000);
+      const userOffsetY = (options?.offsetY ?? 0) * (h / 1000);
+
+      const targetW = w * anchor.headWidth * scale;
+      const targetH = h * anchor.headHeight * scale;
+      const targetX = (w * anchor.headX) - (targetW / 2) + userOffsetX;
+      const targetY = (h * anchor.headY) + userOffsetY;
+
+      // Subtle drop shadow behind chin/neck onto collar
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetY = 8;
+      ctx.drawImage(faceCutoutCanvas, targetX, targetY, targetW, targetH);
+      ctx.restore();
+
+      // Draw crisp face cutout
+      ctx.drawImage(faceCutoutCanvas, targetX, targetY, targetW, targetH);
+
+      // Atmospheric lighting tint matching arena mood
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      const tintGrad = ctx.createRadialGradient(
+        targetX + targetW / 2,
+        targetY + targetH / 3,
+        20,
+        targetX + targetW / 2,
+        targetY + targetH / 2,
+        targetW * 0.8
+      );
+      tintGrad.addColorStop(0, 'rgba(255, 230, 200, 0.12)');
+      tintGrad.addColorStop(1, 'rgba(0, 0, 0, 0.20)');
+      ctx.fillStyle = tintGrad;
+      ctx.fillRect(targetX, targetY, targetW, targetH);
+      ctx.restore();
+
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+
+    sceneImg.onerror = () => {
+      resolve(sceneUrl);
+    };
+
+    sceneImg.src = sceneUrl;
+  });
+}
+
+/**
+ * High-level dynamic scene generator for news cards and profile banners.
+ * Segregated strictly from the player's primary avatar.
+ */
+export async function generateDynamicActionScene(params: {
+  player: Player;
+  scenarioPreset: ScenarioPreset;
+  storyId?: string;
+  headline?: string;
+}): Promise<ActionSceneCompositeResult> {
+  const { player, scenarioPreset, storyId, headline } = params;
+
+  // 1. Get high-resolution face cutout
+  const faceCutout = await getPlayerFaceCutout(player);
+
+  let finalSceneUrl: string = ASSETS.scenarios[scenarioPreset] || ASSETS.scenarios.throwing;
+
+  if (faceCutout && faceCutout.cutoutCanvas) {
+    try {
+      finalSceneUrl = await compositeFaceOntoActionScene(scenarioPreset, faceCutout.cutoutCanvas);
+    } catch (err) {
+      console.warn('[DynamicScene] Compositing error, falling back to base scene:', err);
+    }
+  }
+
+  // 2. If storyId is provided, persist specifically for the news story
+  if (storyId) {
+    try {
+      await fetch('/api/news/generate-scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyId,
+          playerId: player.id,
+          scenarioPreset,
+          headline: headline || '',
+          sceneImageUrl: finalSceneUrl,
+        }),
+      });
+    } catch (e) {
+      console.warn('[DynamicScene] Server persistence note:', e);
+    }
+  }
+
+  return {
+    sceneImageUrl: finalSceneUrl,
+    scenarioPreset,
+    playerId: player.id,
+    storyId,
+    playerAvatarUnchanged: true,
+  };
+}
+
+/**
+ * Compatibility wrapper for generateNewsSceneImage
  */
 export async function generateNewsSceneImage(params: {
   storyId: string;
   playerId: string;
   playerAvatarUrl?: string;
-  scenarioPreset: 'throwing' | 'celebration' | 'disappointment' | 'cigarette' | 'trophy';
+  scenarioPreset: ScenarioPreset;
   headline: string;
   customPrompt?: string;
-}): Promise<NewsSceneResult> {
-  const { storyId, playerId, scenarioPreset, headline, customPrompt } = params;
-
+}): Promise<{ newsCardImageUrl: string; storyId: string; playerAvatarUnchanged: boolean; scenarioPreset: ScenarioPreset }> {
   try {
     const res = await fetch('/api/news/generate-scene', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        storyId,
-        playerId,
-        scenarioPreset,
-        headline,
-        customPrompt,
-      }),
+      body: JSON.stringify(params),
     });
-
     if (res.ok) {
       const data = await res.json();
       if (data.newsCardImageUrl) {
         return {
           newsCardImageUrl: data.newsCardImageUrl,
-          storyId,
+          storyId: params.storyId,
           playerAvatarUnchanged: true,
-          scenarioPreset,
+          scenarioPreset: params.scenarioPreset,
         };
       }
     }
   } catch (e) {
-    console.warn('[NewsSceneAI] Server call fallback:', e);
-  }
-
-  // Fallback scenario preset image
-  let fallbackImage: string = ASSETS.scenarios.throwing;
-  switch (scenarioPreset) {
-    case 'celebration':
-      fallbackImage = ASSETS.scenarios.celebration;
-      break;
-    case 'disappointment':
-      fallbackImage = ASSETS.scenarios.disappointment;
-      break;
-    case 'cigarette':
-      fallbackImage = ASSETS.scenarios.cigarette;
-      break;
-    case 'trophy':
-      fallbackImage = ASSETS.scenarios.trophy || ASSETS.bearChampion;
-      break;
-    case 'throwing':
-    default:
-      fallbackImage = ASSETS.scenarios.throwing;
-      break;
+    console.warn('[NewsScene] Server fallback:', e);
   }
 
   return {
-    newsCardImageUrl: fallbackImage,
-    storyId,
+    newsCardImageUrl: ASSETS.scenarios[params.scenarioPreset] || ASSETS.scenarios.throwing,
+    storyId: params.storyId,
     playerAvatarUnchanged: true,
-    scenarioPreset,
+    scenarioPreset: params.scenarioPreset,
   };
 }

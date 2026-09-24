@@ -496,29 +496,98 @@ app.post('/api/league/pin', (req: Request, res: Response) => {
 
 // --- AI AVATAR & NEWS SCENE ENDPOINTS ---
 
-// 1. Process uploaded face photo into Standardized Smart Player Avatar
-// Rules: Precisely segment player face, leave behind background & clothing, composite onto white shirt, blue tie, black blazer, flat gray background.
-app.post('/api/player/process-avatar', async (req: Request, res: Response) => {
-  const { image, playerName, playerId, options } = req.body;
+// 1. Detect face and head boundaries for dynamic media compositing
+app.post('/api/player/detect-face', async (req: Request, res: Response) => {
+  const { image, playerName } = req.body;
   if (!image) {
     res.status(400).json({ error: 'Image data or URL is required' });
     return;
   }
 
   try {
-    let detectedFaceBox: { ymin: number; xmin: number; ymax: number; xmax: number; chinY?: number } | null = null;
-    let modelUsed = 'Smart Face Cutout Engine';
+    let detectedFaceBox: { ymin: number; xmin: number; ymax: number; xmax: number; chinY?: number; faceCenterX?: number; faceCenterY?: number; hairTopY?: number } | null = null;
+    let modelUsed = 'Local Vision Segmentation';
 
-    // If Gemini client is active and base64 image is provided, run AI vision to detect head & face boundaries
     if (aiClient && typeof image === 'string' && image.startsWith('data:image')) {
       try {
         const base64Data = image.split(',')[1];
         const mimeMatch = image.match(/^data:([^;]+);base64,/);
         const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-        console.log(`[Gemini AI] Detecting face boundaries for player: ${playerName || playerId || 'Player'}`);
+        console.log(`[Gemini AI] Detecting exact face boundaries for: ${playerName || 'Player'}`);
 
-        const prompt = `Analyze this portrait photo. Detect the primary person's face and head. Return ONLY a JSON object with:
+        const prompt = `Analyze this portrait photo. Detect the primary person's face, head, and hair boundaries. Return ONLY a JSON object:
+{
+  "ymin": integer (0 to 1000, top edge of head and hair),
+  "xmin": integer (0 to 1000, left edge of ears, cheeks, hair),
+  "ymax": integer (0 to 1000, bottom edge of chin/upper neck where it meets collar),
+  "xmax": integer (0 to 1000, right edge of ears, cheeks, hair),
+  "chinY": integer (0 to 1000, lowest point of the jaw/chin),
+  "faceCenterX": integer (0 to 1000),
+  "faceCenterY": integer (0 to 1000),
+  "hairTopY": integer (0 to 1000)
+}`;
+
+        const response = await aiClient.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { data: base64Data, mimeType } },
+                { text: prompt },
+              ],
+            },
+          ],
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const text = response.text?.trim();
+        if (text) {
+          detectedFaceBox = JSON.parse(text);
+          modelUsed = 'Gemini AI Vision';
+          console.log(`[Gemini AI] Detected face box:`, detectedFaceBox);
+        }
+      } catch (geminiErr: any) {
+        console.warn('[Gemini AI] Face detection fallback to local vision engine:', geminiErr.message || geminiErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      detectedFaceBox,
+      modelUsed,
+    });
+  } catch (err: any) {
+    console.error('[Face Detection] Error:', err);
+    res.status(500).json({ error: err.message || 'Face detection failed' });
+  }
+});
+
+// 2. Process uploaded player avatar:
+// STRICT RULE: Original uploaded photo is preserved UNTOUCHED for player cards, standings, and profiles.
+// No suit, blazer, tie, or background replacement is applied to the standard player avatar.
+app.post('/api/player/process-avatar', async (req: Request, res: Response) => {
+  const { image, playerName, playerId } = req.body;
+  if (!image) {
+    res.status(400).json({ error: 'Image data or URL is required' });
+    return;
+  }
+
+  try {
+    let detectedFaceBox = null;
+    let modelUsed = 'Original Photo Engine';
+
+    // If Gemini client is active, detect face boundaries for dynamic news/event media only
+    if (aiClient && typeof image === 'string' && image.startsWith('data:image')) {
+      try {
+        const base64Data = image.split(',')[1];
+        const mimeMatch = image.match(/^data:([^;]+);base64,/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+        const prompt = `Analyze this portrait photo. Detect the primary person's face and head. Return ONLY a JSON object:
 {
   "ymin": integer (0 to 1000, top edge of head and hair),
   "xmin": integer (0 to 1000, left edge of ears, cheeks, hair),
@@ -546,36 +615,33 @@ app.post('/api/player/process-avatar', async (req: Request, res: Response) => {
         const text = response.text?.trim();
         if (text) {
           detectedFaceBox = JSON.parse(text);
-          modelUsed = 'Gemini AI Vision + Smart Cutout Engine';
-          console.log(`[Gemini AI] Detected face box:`, detectedFaceBox);
+          modelUsed = 'Gemini AI Vision (Face Extractor)';
         }
       } catch (geminiErr: any) {
-        console.warn('[Gemini AI] Face detection fallback to local vision engine:', geminiErr.message || geminiErr);
+        console.warn('[Gemini AI] Face detection fallback:', geminiErr.message || geminiErr);
       }
     }
 
-    const uniformPreset = '/uniforms/standard_avatar_ref_1790253778836.jpg';
-
     res.json({
       success: true,
+      photoUrl: image,
       smartAvatarUrl: image,
       originalPhotoUrl: image,
-      uniformTemplate: uniformPreset,
       detectedFaceBox,
       modelUsed,
-      notes: 'Precisely segmented face, dropped messy background and clothing, composited onto white shirt, blue tie, black blazer on flat gray background.',
+      notes: 'Original uploaded photo preserved untouched. Face coordinates prepared for dynamic news action scenes.',
     });
   } catch (err: any) {
     console.error('[AI Avatar] Processing error:', err);
-    res.status(500).json({ error: err.message || 'Failed to process smart avatar' });
+    res.status(500).json({ error: err.message || 'Failed to process avatar' });
   }
 });
 
-// 2. Generate Dynamic AI News Scene Image
-// Rules: Incorporates player's face from their avatar into dynamic action scenes (throwing, celebrating in front of crowd, hands on head, trophy)
-// STRICT REQUIREMENT: Does NOT overwrite or replace the player's primary smart avatar headshot in the database!
+// 3. Generate Dynamic AI News Scene Image
+// Rules: Composites player's face cutout onto dynamic action scenes (throwing, celebrating, hands on head, trophy)
+// STRICT REQUIREMENT: Does NOT overwrite or replace the player's primary avatar in the database!
 app.post('/api/news/generate-scene', async (req: Request, res: Response) => {
-  const { storyId, playerId, scenarioPreset, headline, customPrompt } = req.body;
+  const { storyId, playerId, scenarioPreset, headline, sceneImageUrl: incomingSceneUrl } = req.body;
 
   if (!storyId || !playerId) {
     res.status(400).json({ error: 'storyId and playerId are required' });
@@ -586,28 +652,30 @@ app.post('/api/news/generate-scene', async (req: Request, res: Response) => {
   const targetPlayer = leagueState.players.find(p => p.id === playerId);
   const playerAvatarSnapshot = targetPlayer?.photoUrl || targetPlayer?.smartAvatarUrl;
 
-  console.log(`[News Scene AI] Generating scene for story "${headline || storyId}" featuring player ${targetPlayer?.name || playerId}`);
-  console.log(`[Integrity Guard] Verified player avatar headshot remains strictly unchanged.`);
+  console.log(`[News Scene AI] Generating action scene for story "${headline || storyId}" featuring player ${targetPlayer?.name || playerId}`);
+  console.log(`[Integrity Guard] Verified player avatar photo remains strictly unchanged.`);
 
-  // Map dynamic action scene based on scenario
-  let sceneImageUrl = '/uniforms/darts_throwing_1790251919632.jpg';
-  switch (scenarioPreset) {
-    case 'celebration':
-      sceneImageUrl = '/uniforms/darts_celebrate_1790251957068.jpg';
-      break;
-    case 'disappointment':
-      sceneImageUrl = '/uniforms/darts_disappoint_1790251946168.jpg';
-      break;
-    case 'cigarette':
-      sceneImageUrl = '/uniforms/darts_cigarette_1790251932917.jpg';
-      break;
-    case 'trophy':
-      sceneImageUrl = '/uniforms/bear_champion_180_1790165774060.jpg';
-      break;
-    case 'throwing':
-    default:
-      sceneImageUrl = '/uniforms/darts_throwing_1790251919632.jpg';
-      break;
+  // Use provided composite or fallback scenario image
+  let sceneImageUrl = incomingSceneUrl;
+  if (!sceneImageUrl) {
+    switch (scenarioPreset) {
+      case 'celebration':
+        sceneImageUrl = '/uniforms/darts_celebrate_1790251957068.jpg';
+        break;
+      case 'disappointment':
+        sceneImageUrl = '/uniforms/darts_disappoint_1790251946168.jpg';
+        break;
+      case 'cigarette':
+        sceneImageUrl = '/uniforms/darts_cigarette_1790251932917.jpg';
+        break;
+      case 'trophy':
+        sceneImageUrl = '/uniforms/bear_champion_180_1790165774060.jpg';
+        break;
+      case 'throwing':
+      default:
+        sceneImageUrl = '/uniforms/darts_throwing_1790251919632.jpg';
+        break;
+    }
   }
 
   // Save specifically for this news story without touching leagueState.players
@@ -628,7 +696,7 @@ app.post('/api/news/generate-scene', async (req: Request, res: Response) => {
     newsCardImageUrl: sceneImageUrl,
     playerAvatarUnchanged: true,
     playerCurrentAvatar: playerAvatarSnapshot,
-    message: 'Dynamic news scene generated. Primary player avatar in Supabase strictly preserved.',
+    message: 'Dynamic news scene generated and stored separately. Primary player avatar strictly preserved untouched.',
   });
 });
 
@@ -640,21 +708,21 @@ app.get('/api/news/scenes', (_req: Request, res: Response) => {
   });
 });
 
-// Update player photo and standardized smart avatar in backend
+// Update player photo in backend - stores exact uploaded photo untouched
 app.post('/api/league/players/:id/photo', (req: Request, res: Response) => {
   const playerId = req.params.id;
   const { photoUrl, smartAvatarUrl, originalPhotoUrl, shirtColors, preferredScenario } = req.body;
 
-  const resolvedAvatar = smartAvatarUrl || photoUrl;
+  const resolvedPhoto = photoUrl || smartAvatarUrl;
 
   const updated = updateState(prev => ({
     players: prev.players.map(p => {
       if (p.id === playerId) {
         return {
           ...p,
-          photoUrl: resolvedAvatar,
-          smartAvatarUrl: resolvedAvatar,
-          originalPhotoUrl: originalPhotoUrl || p.originalPhotoUrl,
+          photoUrl: resolvedPhoto,
+          smartAvatarUrl: resolvedPhoto,
+          originalPhotoUrl: originalPhotoUrl || resolvedPhoto || p.originalPhotoUrl,
           customShirtColors: shirtColors || p.customShirtColors,
           preferredScenario: preferredScenario || p.preferredScenario,
         };

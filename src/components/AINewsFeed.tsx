@@ -4,7 +4,7 @@ import { Player, MatchResult, PlayerStats, AINewsItem } from '../types/darts';
 import { generateLeagueNews } from '../utils/aiNewsGenerator';
 import { BearAvatar } from './BearAvatar';
 import { ASSETS } from '../utils/assets';
-import { generateNewsSceneImage } from '../utils/aiAvatarTransformer';
+import { generateDynamicActionScene } from '../utils/aiAvatarTransformer';
 
 interface AINewsFeedProps {
   players: Player[];
@@ -93,23 +93,24 @@ export const AINewsFeed: React.FC<AINewsFeedProps> = ({
     e.stopPropagation();
     setGeneratingStoryId(item.id);
     try {
-      const result = await generateNewsSceneImage({
+      const targetPlayer = playerMap.get(item.primaryPlayerId);
+      if (!targetPlayer) return;
+
+      const result = await generateDynamicActionScene({
+        player: targetPlayer,
+        scenarioPreset: item.scenarioPreset,
         storyId: item.id,
-        playerId: item.primaryPlayerId,
-        playerAvatarUrl: playerMap.get(item.primaryPlayerId)?.smartAvatarUrl,
-        scenarioPreset: item.scenarioPreset as any,
         headline: item.headline,
-        customPrompt: item.customPrompt,
       });
 
       setNewsSceneMap(prev => ({
         ...prev,
-        [item.id]: result.newsCardImageUrl,
+        [item.id]: result.sceneImageUrl,
       }));
 
       setGenerationNotification({
         storyId: item.id,
-        message: 'Dynamic Action Scene generated! Primary Player Avatar in Supabase strictly preserved.',
+        message: 'Dynamic Action Scene composited! Player avatar remains strictly untouched.',
       });
 
       setTimeout(() => {
@@ -206,8 +207,8 @@ export const AINewsFeed: React.FC<AINewsFeedProps> = ({
             <strong className="text-white">Dual Output Architecture:</strong> Dynamic action scenes on news cards never overwrite primary player avatar headshots in Supabase.
           </span>
         </div>
-        <span className="hidden sm:inline font-mono text-[10px] text-neutral-500">
-          Avatar Headshot (Suit) ≠ News Story Scene (Action)
+        <span className="hidden sm:inline font-mono text-[10px] text-neutral-400">
+          Player Avatar (Untouched Original) ≠ Dynamic Action Scene (Composited)
         </span>
       </div>
 
@@ -281,8 +282,8 @@ export const AINewsFeed: React.FC<AINewsFeedProps> = ({
                 <div className="absolute bottom-4 left-4 flex items-center gap-3 bg-neutral-950/90 backdrop-blur-md p-2 rounded-2xl border border-neutral-800/90 shadow-2xl group-hover:border-red-500/60 transition-colors">
                   <BearAvatar player={playerMap.get(featured.primaryPlayerId)!} size="lg" />
                   <div className="pr-2">
-                    <div className="text-[10px] font-mono uppercase font-bold text-blue-400 flex items-center gap-1">
-                      <span>Standard Smart Avatar</span>
+                    <div className="text-[10px] font-mono uppercase font-bold text-emerald-400 flex items-center gap-1">
+                      <span>Player Avatar (Untouched)</span>
                     </div>
                     <div className="text-sm font-black text-white leading-tight">
                       {playerMap.get(featured.primaryPlayerId)?.name}
