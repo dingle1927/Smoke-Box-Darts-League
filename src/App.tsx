@@ -21,11 +21,13 @@ import {
   remoteResetDemo,
   remoteClearMatches,
   remoteUpdatePin,
+  remoteUpdatePlayerPhoto,
   subscribeToLeagueChanges,
 } from './utils/cloudSync';
 import { calculatePlayerStats } from './utils/statsCalculator';
 import { Header } from './components/Header';
 import { HeroBanner } from './components/HeroBanner';
+import { AINewsFeed } from './components/AINewsFeed';
 import { StandingsTable } from './components/StandingsTable';
 import { LeagueRules } from './components/LeagueRules';
 import { Leaderboards } from './components/Leaderboards';
@@ -248,6 +250,69 @@ export default function App() {
     setIsAdminPortalOpen(true);
   };
 
+  // Update player face photo, custom shirt, scenario directly with Supabase
+  const handleUpdatePlayerPhoto = async (
+    playerId: string,
+    photoUrl: string,
+    shirtColors?: any,
+    preferredScenario?: any
+  ) => {
+    try {
+      fetch(`/api/league/players/${playerId}/photo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          photoUrl,
+          smartAvatarUrl: photoUrl,
+          shirtColors,
+          preferredScenario,
+        }),
+      }).catch(() => {});
+
+      const res = await remoteUpdatePlayerPhoto(playerId, photoUrl, shirtColors, preferredScenario);
+      if (res) {
+        setPlayers(res.players);
+        saveStoredPlayers(res.players);
+        setLastSyncTime(new Date());
+      } else {
+        setPlayers(prev => {
+          const updated = prev.map(p => {
+            if (p.id === playerId) {
+              return {
+                ...p,
+                photoUrl,
+                smartAvatarUrl: photoUrl,
+                customShirtColors: shirtColors || p.customShirtColors,
+                preferredScenario: preferredScenario || p.preferredScenario,
+              };
+            }
+            return p;
+          });
+          saveStoredPlayers(updated);
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn('Fallback local player photo update:', err);
+      setPlayers(prev => {
+        const updated = prev.map(p => {
+          if (p.id === playerId) {
+            return {
+              ...p,
+              photoUrl,
+              smartAvatarUrl: photoUrl,
+              customShirtColors: shirtColors || p.customShirtColors,
+              preferredScenario: preferredScenario || p.preferredScenario,
+            };
+          }
+          return p;
+        });
+        saveStoredPlayers(updated);
+        return updated;
+      });
+    }
+  };
+
   // Launch Edit for existing match
   const handleEditMatch = (match: MatchResult) => {
     setEditingMatch(match);
@@ -343,13 +408,24 @@ export default function App() {
           />
         )}
 
-        {/* Tab 1: Standings */}
+        {/* Tab 1: Standings with AI News Feed directly above */}
         {currentTab === 'standings' && (
-          <StandingsTable 
-            stats={stats} 
-            onSelectPlayer={handleSelectPlayer}
-            onGoToRules={() => setCurrentTab('rules')}
-          />
+          <div className="space-y-8">
+            {/* League News & AI Headlines */}
+            <AINewsFeed
+              players={players}
+              matches={matches}
+              stats={stats}
+              onSelectPlayer={handleSelectPlayer}
+            />
+
+            {/* League Standings Table */}
+            <StandingsTable 
+              stats={stats} 
+              onSelectPlayer={handleSelectPlayer}
+              onGoToRules={() => setCurrentTab('rules')}
+            />
+          </div>
         )}
 
         {/* Tab: Official League Rules & Scoring System */}
@@ -419,6 +495,7 @@ export default function App() {
               setSelectedPlayerId(id);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            onUpdatePlayerPhotoAndShirt={handleUpdatePlayerPhoto}
           />
         )}
       </main>
@@ -445,6 +522,7 @@ export default function App() {
           onDeleteMatchResult={handleDeleteMatchResult}
           onUpdatePlayers={handleUpdatePlayers}
           onDeletePlayer={handleDeletePlayer}
+          onUpdatePlayerPhoto={handleUpdatePlayerPhoto}
           onResetData={handleResetDemoData}
           onClearMatches={handleClearMatches}
           onClose={() => {

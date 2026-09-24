@@ -1,18 +1,19 @@
 import { Player, MatchResult, Fixture } from '../types/darts';
+import { ASSETS } from '../utils/assets';
 
 export const INITIAL_PLAYERS: Player[] = [
-  { id: 'p1', name: 'Marcus Thorne', nickname: 'The Grizzly', avatarBearType: 'grizzly', active: true, joinedDate: '2026-01-10' },
-  { id: 'p2', name: 'Liam O’Connor', nickname: 'Smoke Screen', avatarBearType: 'smoky', active: true, joinedDate: '2026-01-10' },
-  { id: 'p3', name: 'Jack Vance', nickname: 'The Bullseye', avatarBearType: 'kodiak', active: true, joinedDate: '2026-01-11' },
-  { id: 'p4', name: 'Tyler Sterling', nickname: 'Apex Bruin', avatarBearType: 'bruin', active: true, joinedDate: '2026-01-11' },
-  { id: 'p5', name: 'Dave Miller', nickname: 'Double Top', avatarBearType: 'grizzly', active: true, joinedDate: '2026-01-12' },
-  { id: 'p6', name: 'Chris Dawson', nickname: 'Treble Beast', avatarBearType: 'smoky', active: true, joinedDate: '2026-01-12' },
-  { id: 'p7', name: 'Sean Gallagher', nickname: 'The Kodiak', avatarBearType: 'kodiak', active: true, joinedDate: '2026-01-13' },
-  { id: 'p8', name: 'Ryan Hayes', nickname: 'Midnight Claw', avatarBearType: 'bruin', active: true, joinedDate: '2026-01-13' },
-  { id: 'p9', name: 'Brett Bennett', nickname: 'The Smoker', avatarBearType: 'smoky', active: true, joinedDate: '2026-01-14' },
-  { id: 'p10', name: 'Nate Cooper', nickname: 'Laser Flight', avatarBearType: 'grizzly', active: true, joinedDate: '2026-01-14' },
-  { id: 'p11', name: 'Aaron Fletcher', nickname: 'Iron Paw', avatarBearType: 'kodiak', active: true, joinedDate: '2026-01-15' },
-  { id: 'p12', name: 'Ethan Walker', nickname: 'The Big Fish', avatarBearType: 'bruin', active: true, joinedDate: '2026-01-15' },
+  { id: 'p1', name: 'Marcus Thorne', nickname: 'The Grizzly', avatarBearType: 'grizzly', active: true, joinedDate: '2026-01-10', photoUrl: ASSETS.standardAvatars[0], smartAvatarUrl: ASSETS.standardAvatars[0] },
+  { id: 'p2', name: 'Liam O’Connor', nickname: 'Smoke Screen', avatarBearType: 'smoky', active: true, joinedDate: '2026-01-10', photoUrl: ASSETS.standardAvatars[1], smartAvatarUrl: ASSETS.standardAvatars[1] },
+  { id: 'p3', name: 'Jack Vance', nickname: 'The Bullseye', avatarBearType: 'kodiak', active: true, joinedDate: '2026-01-11', photoUrl: ASSETS.standardAvatars[2], smartAvatarUrl: ASSETS.standardAvatars[2] },
+  { id: 'p4', name: 'Tyler Sterling', nickname: 'Apex Bruin', avatarBearType: 'bruin', active: true, joinedDate: '2026-01-11', photoUrl: ASSETS.standardAvatars[3], smartAvatarUrl: ASSETS.standardAvatars[3] },
+  { id: 'p5', name: 'Dave Miller', nickname: 'Double Top', avatarBearType: 'grizzly', active: true, joinedDate: '2026-01-12', photoUrl: ASSETS.standardAvatars[0], smartAvatarUrl: ASSETS.standardAvatars[0] },
+  { id: 'p6', name: 'Chris Dawson', nickname: 'Treble Beast', avatarBearType: 'smoky', active: true, joinedDate: '2026-01-12', photoUrl: ASSETS.standardAvatars[1], smartAvatarUrl: ASSETS.standardAvatars[1] },
+  { id: 'p7', name: 'Sean Gallagher', nickname: 'The Kodiak', avatarBearType: 'kodiak', active: true, joinedDate: '2026-01-13', photoUrl: ASSETS.standardAvatars[2], smartAvatarUrl: ASSETS.standardAvatars[2] },
+  { id: 'p8', name: 'Ryan Hayes', nickname: 'Midnight Claw', avatarBearType: 'bruin', active: true, joinedDate: '2026-01-13', photoUrl: ASSETS.standardAvatars[3], smartAvatarUrl: ASSETS.standardAvatars[3] },
+  { id: 'p9', name: 'Brett Bennett', nickname: 'The Smoker', avatarBearType: 'smoky', active: true, joinedDate: '2026-01-14', photoUrl: ASSETS.standardAvatars[0], smartAvatarUrl: ASSETS.standardAvatars[0] },
+  { id: 'p10', name: 'Nate Cooper', nickname: 'Laser Flight', avatarBearType: 'grizzly', active: true, joinedDate: '2026-01-14', photoUrl: ASSETS.standardAvatars[1], smartAvatarUrl: ASSETS.standardAvatars[1] },
+  { id: 'p11', name: 'Aaron Fletcher', nickname: 'Iron Paw', avatarBearType: 'kodiak', active: true, joinedDate: '2026-01-15', photoUrl: ASSETS.standardAvatars[2], smartAvatarUrl: ASSETS.standardAvatars[2] },
+  { id: 'p12', name: 'Ethan Walker', nickname: 'The Big Fish', avatarBearType: 'bruin', active: true, joinedDate: '2026-01-15', photoUrl: ASSETS.standardAvatars[3], smartAvatarUrl: ASSETS.standardAvatars[3] },
 ];
 
 /**

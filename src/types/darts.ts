@@ -3,10 +3,40 @@ export interface Player {
   name: string;
   nickname: string;
   avatarSeed?: string;
+  photoUrl?: string; // Standardized smart headshot (white shirt, blue tie, black blazer, clean gray background)
+  smartAvatarUrl?: string; // Standardized smart avatar headshot stored in Supabase
+  originalPhotoUrl?: string; // Original uploaded face photo before AI styling
   avatarBearType?: 'grizzly' | 'smoky' | 'polar' | 'kodiak' | 'bruin';
   active: boolean;
   joinedDate: string;
+  customShirtColors?: {
+    primary: string; // strictly never green
+    secondary: string;
+    collar: string;
+  };
+  preferredScenario?: 'throwing' | 'cigarette' | 'disappointment' | 'celebration';
 }
+
+export type ScenarioPreset = 'throwing' | 'cigarette' | 'disappointment' | 'celebration' | 'trophy';
+
+export interface AINewsItem {
+  id: string;
+  headline: string;
+  category: 'upset' | 'streak' | 'titlerace' | 'games_in_hand' | '180_barrage' | 'checkout' | 'draw_drama' | 'spotlight';
+  summary: string;
+  article: string;
+  primaryPlayerId: string;
+  secondaryPlayerId?: string;
+  timestamp: string;
+  matchId?: string;
+  scenarioPreset: ScenarioPreset;
+  scenarioTitle: string;
+  customPrompt: string;
+  importance: 'breaking' | 'high' | 'featured' | 'standard';
+  newsCardImageUrl?: string; // Dynamic AI scene image generated specifically for this news story
+  newsCardScenePrompt?: string; // Custom prompt used to generate this news scene
+}
+
 
 export interface MatchResult {
   id: string;

@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Player, MatchResult, PlayerStats } from '../types/darts';
+import { Player, MatchResult, PlayerStats, ScenarioPreset } from '../types/darts';
 import { INITIAL_PLAYERS, INITIAL_MATCH_RESULTS, generateAllFixtures } from '../data/initialLeagueData';
 import { calculatePlayerStats } from './statsCalculator';
 
@@ -13,25 +13,37 @@ export interface RemoteLeagueState {
 }
 
 // Map database row to Player
-function mapPlayerFromDb(row: any): Player {
+function mapPlayerFromDb(row: any, extraMedia?: Record<string, any>): Player {
+  const seed = row.avatar_seed ? String(row.avatar_seed).trim() : '';
+  const isImageSeed = seed.startsWith('http://') || seed.startsWith('https://') || seed.startsWith('data:image/') || seed.startsWith('/');
+  const media = extraMedia?.[row.id] || {};
+
+  const resolvedPhoto = media.smartAvatarUrl || media.photoUrl || (isImageSeed ? seed : undefined);
+
   return {
     id: String(row.id),
     name: String(row.name || ''),
     nickname: String(row.nickname || ''),
-    avatarSeed: row.avatar_seed || undefined,
+    avatarSeed: seed || undefined,
+    photoUrl: resolvedPhoto,
+    smartAvatarUrl: resolvedPhoto,
+    originalPhotoUrl: media.originalPhotoUrl || undefined,
     avatarBearType: (row.avatar_bear_type as any) || 'smoky',
     active: row.active ?? true,
     joinedDate: row.joined_date || row.created_at || new Date().toISOString(),
+    customShirtColors: media.customShirtColors || undefined,
+    preferredScenario: media.preferredScenario || undefined,
   };
 }
 
 // Map Player to database row
 function mapPlayerToDb(p: Partial<Player>) {
+  const photo = p.photoUrl || p.avatarSeed || '';
   return {
     id: p.id,
     name: p.name,
     nickname: p.nickname || '',
-    avatar_seed: p.avatarSeed || '',
+    avatar_seed: photo,
     avatar_bear_type: p.avatarBearType || 'smoky',
     active: p.active ?? true,
     joined_date: p.joinedDate || new Date().toISOString(),
@@ -190,10 +202,11 @@ async function seedInitialSupabaseDataIfEmpty(): Promise<{ players: Player[]; ma
 export async function fetchRemoteState(): Promise<RemoteLeagueState | null> {
   try {
     // Direct concurrent queries to Supabase tables
-    const [playersRes, matchesRes, pinRes] = await Promise.all([
+    const [playersRes, matchesRes, pinRes, mediaRes] = await Promise.all([
       supabase.from('players').select('*').order('name', { ascending: true }),
       supabase.from('matches').select('*').order('played_at', { ascending: false }),
       supabase.from('smokebox_league_state').select('payload').eq('id', 'admin_config').maybeSingle(),
+      supabase.from('smokebox_league_state').select('payload').eq('id', 'player_media').maybeSingle(),
     ]);
 
     if (playersRes.error) {
@@ -201,7 +214,9 @@ export async function fetchRemoteState(): Promise<RemoteLeagueState | null> {
       throw new Error(playersRes.error.message);
     }
 
-    let players: Player[] = (playersRes.data || []).map(mapPlayerFromDb);
+    const extraMedia = (mediaRes.data?.payload as Record<string, any>) || {};
+
+    let players: Player[] = (playersRes.data || []).map(row => mapPlayerFromDb(row, extraMedia));
     let matches: MatchResult[] = (matchesRes.data || []).map(mapMatchFromDb);
 
     // If Supabase players table is empty on fresh database setup, auto-seed default championship roster
@@ -246,7 +261,7 @@ export async function remoteAddPlayer(
     }
 
     const { data: allPlayers } = await supabase.from('players').select('*').order('name', { ascending: true });
-    const mapped = (allPlayers || []).map(mapPlayerFromDb);
+    const mapped = (allPlayers || []).map(row => mapPlayerFromDb(row));
     return { players: mapped, lastUpdated: new Date().toISOString() };
   } catch (err) {
     console.error('[Supabase] remoteAddPlayer failed:', err);
@@ -267,11 +282,68 @@ export async function remoteUpdatePlayers(
     }
 
     const { data: allPlayers } = await supabase.from('players').select('*').order('name', { ascending: true });
-    const mapped = (allPlayers || []).map(mapPlayerFromDb);
+    const mapped = (allPlayers || []).map(row => mapPlayerFromDb(row));
     return { players: mapped, lastUpdated: new Date().toISOString() };
   } catch (err) {
     console.error('[Supabase] remoteUpdatePlayers failed:', err);
     return null;
+  }
+}
+
+// Update player photo / media directly in Supabase (persisting to players table & player_media state)
+export async function remoteUpdatePlayerPhoto(
+  playerId: string,
+  photoUrl: string,
+  customShirtColors?: { primary: string; secondary: string; collar: string },
+  preferredScenario?: ScenarioPreset
+): Promise<{ players: Player[]; lastUpdated: string } | null> {
+  try {
+    // 1. Update avatar_seed directly on the players row in Supabase
+    const { error: pErr } = await supabase
+      .from('players')
+      .update({
+        avatar_seed: photoUrl || '',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', playerId);
+
+    if (pErr) {
+      console.warn('[Supabase] Warning updating player avatar_seed:', pErr.message);
+    }
+
+    // 2. Persist media payload in smokebox_league_state
+    const existingMediaRes = await supabase
+      .from('smokebox_league_state')
+      .select('payload')
+      .eq('id', 'player_media')
+      .maybeSingle();
+
+    const currentPayload = (existingMediaRes.data?.payload as Record<string, any>) || {};
+    const updatedPayload = {
+      ...currentPayload,
+      [playerId]: {
+        ...(currentPayload[playerId] || {}),
+        photoUrl: photoUrl || '',
+        smartAvatarUrl: photoUrl || '',
+        customShirtColors: customShirtColors || currentPayload[playerId]?.customShirtColors,
+        preferredScenario: preferredScenario || currentPayload[playerId]?.preferredScenario || 'throwing',
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
+    await supabase.from('smokebox_league_state').upsert({
+      id: 'player_media',
+      payload: updatedPayload,
+      updated_at: new Date().toISOString(),
+    });
+
+    // 3. Return fresh mapped players
+    const { data: allPlayers } = await supabase.from('players').select('*').order('name', { ascending: true });
+    const mapped = (allPlayers || []).map(row => mapPlayerFromDb(row, updatedPayload));
+    return { players: mapped, lastUpdated: new Date().toISOString() };
+  } catch (err) {
+    console.error('[Supabase] remoteUpdatePlayerPhoto failed:', err);
+    throw err;
   }
 }
 
@@ -301,7 +373,7 @@ export async function remoteDeletePlayer(
       supabase.from('matches').select('*').order('played_at', { ascending: false }),
     ]);
 
-    const updatedPlayers = (playersRes.data || []).map(mapPlayerFromDb);
+    const updatedPlayers = (playersRes.data || []).map(row => mapPlayerFromDb(row));
     const updatedMatches = (matchesRes.data || []).map(mapMatchFromDb);
 
     syncStandingsToSupabase(updatedPlayers, updatedMatches).catch(() => {});
@@ -340,7 +412,7 @@ export async function remoteSaveMatch(
     // Refresh standings in background
     const { data: allPlayers } = await supabase.from('players').select('*');
     if (allPlayers) {
-      syncStandingsToSupabase(allPlayers.map(mapPlayerFromDb), mapped).catch(() => {});
+      syncStandingsToSupabase(allPlayers.map(row => mapPlayerFromDb(row)), mapped).catch(() => {});
     }
 
     return { matches: mapped, lastUpdated: new Date().toISOString() };
@@ -367,7 +439,7 @@ export async function remoteDeleteMatch(
     // Refresh standings in background
     const { data: allPlayers } = await supabase.from('players').select('*');
     if (allPlayers) {
-      syncStandingsToSupabase(allPlayers.map(mapPlayerFromDb), mapped).catch(() => {});
+      syncStandingsToSupabase(allPlayers.map(row => mapPlayerFromDb(row)), mapped).catch(() => {});
     }
 
     return { matches: mapped, lastUpdated: new Date().toISOString() };
@@ -432,7 +504,7 @@ export async function remoteClearMatches(): Promise<{ matches: MatchResult[]; la
     // Refresh standings with 0 matches
     const { data: allPlayers } = await supabase.from('players').select('*');
     if (allPlayers) {
-      syncStandingsToSupabase(allPlayers.map(mapPlayerFromDb), []).catch(() => {});
+      syncStandingsToSupabase(allPlayers.map(row => mapPlayerFromDb(row)), []).catch(() => {});
     }
 
     return { matches: [], lastUpdated: new Date().toISOString() };

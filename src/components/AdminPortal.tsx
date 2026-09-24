@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Trash2, Edit3, Save, X, RotateCcw, AlertTriangle, Key, Users, Trophy, Target, Database } from 'lucide-react';
+import { ShieldCheck, Plus, Trash2, Edit3, Save, X, RotateCcw, AlertTriangle, Key, Users, Trophy, Target, Database, Camera, Sparkles } from 'lucide-react';
 import { Player, MatchResult, Fixture } from '../types/darts';
 import { BearAvatar } from './BearAvatar';
+import { PlayerPhotoModal } from './PlayerPhotoModal';
+import { remoteUpdatePlayerPhoto } from '../utils/cloudSync';
 
 interface AdminPortalProps {
   players: Player[];
@@ -11,6 +13,7 @@ interface AdminPortalProps {
   onDeleteMatchResult: (matchId: string) => void;
   onUpdatePlayers: (players: Player[]) => void;
   onDeletePlayer?: (playerId: string) => void;
+  onUpdatePlayerPhoto?: (playerId: string, photoUrl: string, shirtColors?: any, preferredScenario?: any) => Promise<void> | void;
   onResetData: () => void;
   onClearMatches: () => void;
   onClose: () => void;
@@ -29,6 +32,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onDeleteMatchResult,
   onUpdatePlayers,
   onDeletePlayer,
+  onUpdatePlayerPhoto,
   onResetData,
   onClearMatches,
   onClose,
@@ -38,6 +42,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   adminPin,
   onUpdateAdminPin,
 }) => {
+  const [selectedPlayerForPhoto, setSelectedPlayerForPhoto] = useState<Player | null>(null);
   const [activeTab, setActiveTab] = useState<'score' | 'history' | 'players' | 'settings'>(
     editingMatch ? 'score' : initialSelectedFixture ? 'score' : 'score'
   );
@@ -118,10 +123,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       return;
     }
 
-    // Fixed 4 legs per match rule: total legs must be exactly 4 (4-0, 3-1, 2-2, 1-3, 0-4)
+    // Fixed 4 legs per match rule OR Early Finish Rule at 3-0 lead
+    const isEarlyFinish = (p1Legs === 3 && p2Legs === 0) || (p1Legs === 0 && p2Legs === 3);
     const totalLegs = p1Legs + p2Legs;
-    if (totalLegs !== 4 || p1Legs < 0 || p1Legs > 4 || p2Legs < 0 || p2Legs > 4) {
-      setFormError('Matches are fixed at exactly 4 legs per game. The score must add up to 4 legs (e.g. 4-0, 3-1, 2-2, 1-3, 0-4).');
+    if (!(totalLegs === 4 || isEarlyFinish) || p1Legs < 0 || p1Legs > 4 || p2Legs < 0 || p2Legs > 4) {
+      setFormError('Matches must total 4 legs (3-1, 2-2, 1-3, 4-0, 0-4) or be an early finish at 3–0 lead (3-0 or 0-3).');
       return;
     }
 
@@ -423,7 +429,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     Match Result (Fixed 4 Legs Per Game)
                   </span>
                   <span className="text-xs font-mono font-semibold text-neutral-400">
-                    Total legs must equal 4
+                    4 legs or 3-0 early finish
                   </span>
                 </div>
 
@@ -431,14 +437,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-neutral-400 font-semibold mr-1">Quick Select:</span>
                   {[
-                    { l1: 4, l2: 0, label: '4 - 0', note: 'P1 Win (3 pts)' },
-                    { l1: 3, l2: 1, label: '3 - 1', note: 'P1 Win (3 pts)' },
-                    { l1: 2, l2: 2, label: '2 - 2', note: 'Draw (1 pt each)' },
-                    { l1: 1, l2: 3, label: '1 - 3', note: 'P2 Win (3 pts)' },
-                    { l1: 0, l2: 4, label: '0 - 4', note: 'P2 Win (3 pts)' },
+                    { l1: 3, l2: 0, label: '3 - 0', tag: 'P1 Early Win (3 pts)' },
+                    { l1: 4, l2: 0, label: '4 - 0', tag: 'P1 Win (3 pts)' },
+                    { l1: 3, l2: 1, label: '3 - 1', tag: 'P1 Win (3 pts)' },
+                    { l1: 2, l2: 2, label: '2 - 2', tag: 'Draw (1 pt each)' },
+                    { l1: 1, l2: 3, label: '1 - 3', tag: 'P2 Win (3 pts)' },
+                    { l1: 0, l2: 4, label: '0 - 4', tag: 'P2 Win (3 pts)' },
+                    { l1: 0, l2: 3, label: '0 - 3', tag: 'P2 Early Win (3 pts)' },
                   ].map(preset => {
                     const isSelected = p1Legs === preset.l1 && p2Legs === preset.l2;
                     const isDrawPreset = preset.l1 === 2 && preset.l2 === 2;
+                    const isEarly = (preset.l1 === 3 && preset.l2 === 0) || (preset.l1 === 0 && preset.l2 === 3);
                     return (
                       <button
                         key={preset.label}
@@ -448,6 +457,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           isSelected
                             ? isDrawPreset
                               ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
+                              : isEarly
+                              ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/50'
                               : 'bg-red-600 text-white shadow-md ring-2 ring-red-400/50'
                             : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
                         }`}
@@ -456,7 +467,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <span className={`text-[10px] font-sans font-medium px-1 rounded ${
                           isSelected ? 'bg-black/30 text-white' : 'text-neutral-500'
                         }`}>
-                          {preset.l1 === 2 ? 'Draw' : preset.l1 > preset.l2 ? 'P1' : 'P2'}
+                          {preset.l1 === 2 ? 'Draw' : isEarly ? (preset.l1 === 3 ? 'P1 3-0' : 'P2 0-3') : preset.l1 > preset.l2 ? 'P1' : 'P2'}
                         </span>
                       </button>
                     );
@@ -522,28 +533,47 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     Calculated Result:
                   </div>
                   <div>
-                    {p1Legs + p2Legs === 4 ? (
-                      p1Legs === 2 && p2Legs === 2 ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-mono font-bold">
-                          <span>2-2 DRAW</span>
-                          <span className="text-[10px] font-sans font-semibold text-amber-400">(1 pt each)</span>
+                    {(() => {
+                      const isEarly = (p1Legs === 3 && p2Legs === 0) || (p1Legs === 0 && p2Legs === 3);
+                      if (isEarly) {
+                        const winnerName = p1Legs === 3 ? (playerMap.get(player1Id)?.name || 'Player 1') : (playerMap.get(player2Id)?.name || 'Player 2');
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-mono font-bold">
+                            <span>{winnerName} EARLY WIN ({p1Legs}-{p2Legs})</span>
+                            <span className="text-[10px] font-sans font-semibold text-emerald-400">(3 pts · 3–0 Lead Rule)</span>
+                          </span>
+                        );
+                      }
+                      if (p1Legs + p2Legs === 4) {
+                        if (p1Legs === 2 && p2Legs === 2) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-mono font-bold">
+                              <span>2-2 DRAW</span>
+                              <span className="text-[10px] font-sans font-semibold text-amber-400">(1 pt each)</span>
+                            </span>
+                          );
+                        }
+                        if (p1Legs > p2Legs) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-mono font-bold">
+                              <span>{playerMap.get(player1Id)?.name || 'Player 1'} WIN ({p1Legs}-{p2Legs})</span>
+                              <span className="text-[10px] font-sans font-semibold text-emerald-400">(3 pts to P1, 0 to P2)</span>
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-950/80 text-blue-300 border border-blue-800 font-mono font-bold">
+                            <span>{playerMap.get(player2Id)?.name || 'Player 2'} WIN ({p2Legs}-{p1Legs})</span>
+                            <span className="text-[10px] font-sans font-semibold text-blue-400">(3 pts to P2, 0 to P1)</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="text-red-400 font-semibold text-xs">
+                          Leg score must total 4 legs or be an early 3–0 lead win
                         </span>
-                      ) : p1Legs > p2Legs ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-mono font-bold">
-                          <span>{playerMap.get(player1Id)?.name || 'Player 1'} WIN ({p1Legs}-{p2Legs})</span>
-                          <span className="text-[10px] font-sans font-semibold text-emerald-400">(3 pts to P1, 0 to P2)</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-950/80 text-blue-300 border border-blue-800 font-mono font-bold">
-                          <span>{playerMap.get(player2Id)?.name || 'Player 2'} WIN ({p2Legs}-{p1Legs})</span>
-                          <span className="text-[10px] font-sans font-semibold text-blue-400">(3 pts to P2, 0 to P1)</span>
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-red-400 font-semibold text-xs">
-                        Invalid total ({p1Legs + p2Legs}/4 legs) — must total 4
-                      </span>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -875,6 +905,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onClick={() => setSelectedPlayerForPhoto(p)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white text-[11px] font-bold border border-neutral-700 transition-colors shadow-sm"
+                          title="Assign Photo / Headshot & Custom Darts Shirt"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-red-400" />
+                          <span>Photo & Apparel</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleTogglePlayerActive(p.id)}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
                             p.active
@@ -1096,6 +1135,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Player Photo & Darts Apparel Media Sync Modal */}
+      {selectedPlayerForPhoto && (
+        <PlayerPhotoModal
+          player={selectedPlayerForPhoto}
+          isOpen={true}
+          onClose={() => setSelectedPlayerForPhoto(null)}
+          onSave={async (pId, photoUrl, shirtColors, preferredScenario) => {
+            if (onUpdatePlayerPhoto) {
+              await onUpdatePlayerPhoto(pId, photoUrl, shirtColors, preferredScenario);
+            } else {
+              await remoteUpdatePlayerPhoto(pId, photoUrl, shirtColors, preferredScenario);
+            }
+          }}
+        />
       )}
     </div>
   );

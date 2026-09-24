@@ -26,8 +26,9 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
   const [calcLegsP1, setCalcLegsP1] = useState<number>(2);
   const [calcLegsP2, setCalcLegsP2] = useState<number>(2);
 
+  const isCalcEarlyFinish = (calcLegsP1 === 3 && calcLegsP2 === 0) || (calcLegsP1 === 0 && calcLegsP2 === 3);
   const calcTotalLegs = calcLegsP1 + calcLegsP2;
-  const isCalcValid = calcTotalLegs === 4;
+  const isCalcValid = calcTotalLegs === 4 || isCalcEarlyFinish;
   const isCalcDraw = calcLegsP1 === 2 && calcLegsP2 === 2;
   const calcP1Points = isCalcDraw ? 1 : calcLegsP1 > calcLegsP2 ? 3 : 0;
   const calcP2Points = isCalcDraw ? 1 : calcLegsP2 > calcLegsP1 ? 3 : 0;
@@ -90,7 +91,7 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
           </div>
           <h3 className="text-lg font-bold text-white mb-2">3 Points for a Win</h3>
           <p className="text-xs text-neutral-400 leading-relaxed">
-            Awarded when a player wins the match with a scoreline of <strong className="text-emerald-300">4 - 0</strong> or <strong className="text-emerald-300">3 - 1</strong>. The defeated player earns 0 points.
+            Awarded when a player wins the match with a scoreline of <strong className="text-emerald-300">3 - 0</strong> (Early Finish), <strong className="text-emerald-300">3 - 1</strong>, or <strong className="text-emerald-300">4 - 0</strong>. The defeated player earns 0 points.
           </p>
         </div>
 
@@ -122,8 +123,28 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
           </div>
           <h3 className="text-lg font-bold text-white mb-2">0 Points for a Loss</h3>
           <p className="text-xs text-neutral-400 leading-relaxed">
-            Awarded when a player finishes with fewer legs (<strong className="text-neutral-300">1 - 3</strong> or <strong className="text-neutral-300">0 - 4</strong>). However, all legs won count toward total Leg Difference (+/-).
+            Awarded when a player finishes with fewer legs (<strong className="text-neutral-300">0 - 3</strong>, <strong className="text-neutral-300">1 - 3</strong> or <strong className="text-neutral-300">0 - 4</strong>). However, all legs won count toward total Leg Difference (+/-).
           </p>
+        </div>
+      </div>
+
+      {/* Early Finish Rule Feature Banner */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-neutral-900 to-neutral-900 border-2 border-emerald-500/60 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-900/80 text-emerald-300 border border-emerald-700 text-[11px] font-black uppercase font-mono tracking-wider">
+            <Zap className="w-3.5 h-3.5" />
+            Official Match Regulation: Early Finish Rule
+          </div>
+          <h3 className="text-lg sm:text-xl font-black text-white font-sans">
+            3–0 Unassailable Lead Triggers Immediate Match Win
+          </h3>
+          <p className="text-xs text-neutral-300 max-w-2xl leading-relaxed">
+            If any player establishes an unassailable <strong className="text-emerald-400">3–0 lead</strong>, the match is immediately declared finished with a win for that player. All player stats, 3-dart averages, 180 counts, and checkout metrics are finalized based strictly on the 3 legs played, without requiring a 4th leg.
+          </p>
+        </div>
+        <div className="px-4 py-2 rounded-xl bg-emerald-950 border border-emerald-800 text-center shrink-0">
+          <span className="text-[10px] uppercase font-bold text-neutral-400 block font-mono">Result Recorded</span>
+          <span className="text-xl font-black text-emerald-400 font-mono">3 - 0 Win</span>
         </div>
       </div>
 
@@ -132,7 +153,7 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
         <div className="flex items-center gap-2 mb-4">
           <Scale className="w-5 h-5 text-red-500" />
           <h2 className="text-lg font-bold text-white uppercase tracking-wider">
-            All Possible 4-Leg Match Outcomes
+            All Possible Match Outcomes (Including Early Finish)
           </h2>
         </div>
 
@@ -148,6 +169,18 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800 font-mono text-xs">
+              <tr className="bg-emerald-950/20 hover:bg-emerald-950/30">
+                <td className="py-3 px-4 font-bold text-emerald-400 text-sm flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  3 - 0
+                </td>
+                <td className="py-3 px-4 text-emerald-300 font-sans font-bold">
+                  ⚡ Early Finish Victory for Player 1 (Unassailable 3-0 Lead)
+                </td>
+                <td className="py-3 px-4 text-center font-bold text-emerald-400 bg-emerald-950/40">3 pts</td>
+                <td className="py-3 px-4 text-center text-neutral-500">0 pts</td>
+                <td className="py-3 px-4 text-emerald-300 font-bold">P1: +3 / P2: -3 (3 legs)</td>
+              </tr>
               <tr className="hover:bg-neutral-800/40">
                 <td className="py-3 px-4 font-bold text-emerald-400 text-sm">4 - 0</td>
                 <td className="py-3 px-4 text-neutral-200 font-sans font-medium">Clean Sweep Victory for Player 1</td>
@@ -186,6 +219,18 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
                 <td className="py-3 px-4 text-center font-bold text-blue-400 bg-blue-950/20">3 pts</td>
                 <td className="py-3 px-4 text-neutral-300">P1: -4 / P2: +4</td>
               </tr>
+              <tr className="bg-blue-950/20 hover:bg-blue-950/30">
+                <td className="py-3 px-4 font-bold text-blue-400 text-sm flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  0 - 3
+                </td>
+                <td className="py-3 px-4 text-blue-300 font-sans font-bold">
+                  ⚡ Early Finish Victory for Player 2 (Unassailable 3-0 Lead)
+                </td>
+                <td className="py-3 px-4 text-center text-neutral-500">0 pts</td>
+                <td className="py-3 px-4 text-center font-bold text-blue-400 bg-blue-950/40">3 pts</td>
+                <td className="py-3 px-4 text-blue-300 font-bold">P1: -3 / P2: +3 (3 legs)</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -203,6 +248,33 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
           Test any leg combination to preview how points and outcomes are calculated:
         </p>
 
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs text-neutral-400 font-semibold mr-1">Quick Test:</span>
+          {[
+            { p1: 3, p2: 0, label: '3 - 0 Early Win' },
+            { p1: 3, p2: 1, label: '3 - 1' },
+            { p1: 2, p2: 2, label: '2 - 2 Draw' },
+            { p1: 1, p2: 3, label: '1 - 3' },
+            { p1: 0, p2: 3, label: '0 - 3 Early Win' },
+          ].map(btn => (
+            <button
+              key={btn.label}
+              type="button"
+              onClick={() => {
+                setCalcLegsP1(btn.p1);
+                setCalcLegsP2(btn.p2);
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all border ${
+                calcLegsP1 === btn.p1 && calcLegsP2 === btn.p2
+                  ? 'bg-neutral-800 text-white border-neutral-600 shadow'
+                  : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:text-white'
+              }`}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+
         <div className="bg-neutral-950 p-6 rounded-xl border border-neutral-800 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
           {/* Player 1 selector */}
           <div className="text-center space-y-2">
@@ -216,7 +288,13 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
                   type="button"
                   onClick={() => {
                     setCalcLegsP1(num);
-                    setCalcLegsP2(4 - num);
+                    if (num === 3 && calcLegsP2 === 0) {
+                      // allow 3-0 early finish
+                    } else if (calcLegsP2 === 3 && num === 0) {
+                      // allow 0-3 early finish
+                    } else {
+                      setCalcLegsP2(Math.max(0, 4 - num));
+                    }
                   }}
                   className={`w-10 h-10 rounded-xl font-mono font-black text-sm transition-all ${
                     calcLegsP1 === num
@@ -238,7 +316,16 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
             <div className="text-2xl font-mono font-black text-white">
               {calcLegsP1} — {calcLegsP2}
             </div>
-            {isCalcDraw ? (
+            {isCalcEarlyFinish ? (
+              <div>
+                <span className="inline-block px-3 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-600 font-mono font-black text-xs uppercase">
+                  ⚡ 3–0 Early Finish Win!
+                </span>
+                <p className="text-[11px] text-emerald-300 mt-1 font-sans">
+                  3 points to {calcLegsP1 > calcLegsP2 ? 'Player 1' : 'Player 2'} · Finalized on 3 legs
+                </p>
+              </div>
+            ) : isCalcDraw ? (
               <div>
                 <span className="inline-block px-3 py-1 rounded bg-amber-950 text-amber-300 border border-amber-700 font-mono font-black text-xs uppercase">
                   2 - 2 Draw!
@@ -280,7 +367,13 @@ export const LeagueRules: React.FC<LeagueRulesProps> = ({
                   type="button"
                   onClick={() => {
                     setCalcLegsP2(num);
-                    setCalcLegsP1(4 - num);
+                    if (num === 3 && calcLegsP1 === 0) {
+                      // allow 0-3 early finish
+                    } else if (calcLegsP1 === 3 && num === 0) {
+                      // allow 3-0 early finish
+                    } else {
+                      setCalcLegsP1(Math.max(0, 4 - num));
+                    }
                   }}
                   className={`w-10 h-10 rounded-xl font-mono font-black text-sm transition-all ${
                     calcLegsP2 === num

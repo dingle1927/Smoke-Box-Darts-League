@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ASSETS } from '../utils/assets';
 import { Player } from '../types/darts';
 
@@ -23,6 +23,7 @@ export const BearAvatar: React.FC<BearAvatarProps> = ({
   showNickname = false,
   className = '',
 }) => {
+  const [imageError, setImageError] = useState(false);
   const type = player.avatarBearType || 'grizzly';
   const colorScheme = BEAR_COLORS[type] || BEAR_COLORS.grizzly;
 
@@ -41,24 +42,39 @@ export const BearAvatar: React.FC<BearAvatarProps> = ({
     .slice(0, 2)
     .toUpperCase();
 
+  const photoUrl = player.smartAvatarUrl || player.photoUrl || 
+    (player.avatarSeed && (player.avatarSeed.startsWith('http') || player.avatarSeed.startsWith('data:image') || player.avatarSeed.startsWith('/')) ? player.avatarSeed : undefined);
+
   return (
     <div className={`inline-flex items-center gap-2 ${className}`}>
       <div
-        className={`relative rounded-full flex items-center justify-center font-bold tracking-wider overflow-hidden shrink-0 ${sizeClasses[size]} ${colorScheme.bg} ${colorScheme.border} shadow-inner`}
+        className={`relative rounded-full flex items-center justify-center font-bold tracking-wider overflow-hidden shrink-0 ${sizeClasses[size]} ${colorScheme.bg} ${colorScheme.border} shadow-inner bg-neutral-900`}
         title={`${player.name} "${player.nickname}"`}
       >
-        {/* Subtle mascot watermark on larger avatars */}
-        {(size === 'lg' || size === 'xl') && (
+        {photoUrl && !imageError ? (
           <img
-            src={ASSETS.mascotLogo}
-            alt="Mascot emblem"
+            src={photoUrl}
+            alt={player.name}
             referrerPolicy="no-referrer"
-            className="absolute inset-0 w-full h-full object-cover opacity-20 filter grayscale contrast-200 pointer-events-none"
+            onError={() => setImageError(true)}
+            className="w-full h-full object-cover object-center"
           />
+        ) : (
+          <>
+            {/* Mascot watermark on larger avatars */}
+            {(size === 'lg' || size === 'xl') && (
+              <img
+                src={ASSETS.mascotLogo}
+                alt="Mascot emblem"
+                referrerPolicy="no-referrer"
+                className="absolute inset-0 w-full h-full object-cover opacity-20 filter grayscale contrast-200 pointer-events-none"
+              />
+            )}
+            <span className={`relative z-10 ${colorScheme.text} font-mono font-black`}>
+              {initials}
+            </span>
+          </>
         )}
-        <span className={`relative z-10 ${colorScheme.text} font-mono font-black`}>
-          {initials}
-        </span>
       </div>
       {showNickname && (
         <div className="flex flex-col min-w-0">
@@ -73,3 +89,4 @@ export const BearAvatar: React.FC<BearAvatarProps> = ({
     </div>
   );
 };
+
