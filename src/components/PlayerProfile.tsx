@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Trophy, ArrowLeft, Target, Award, Zap, CheckCircle, XCircle, Users, Newspaper, Sparkles, Copy, Check, ShieldAlert, Sliders } from 'lucide-react';
+import { Trophy, ArrowLeft, Target, Award, Zap, CheckCircle, XCircle, Users, Newspaper, Sparkles, Copy, Check, ShieldAlert, Sliders, Scissors } from 'lucide-react';
 import { Player, MatchResult, PlayerStats, ScenarioPreset } from '../types/darts';
 import { getHeadToHeadRecords } from '../utils/statsCalculator';
 import { generateLeagueNews, getNewsForPlayer, SCENARIO_PRESETS, buildScenarioPrompt } from '../utils/aiNewsGenerator';
 import { BearAvatar } from './BearAvatar';
 import { ASSETS } from '../utils/assets';
 import { AIImageStudioModal } from './AIImageStudioModal';
+import { PlayerPhotoModal } from './PlayerPhotoModal';
 
 interface PlayerProfileProps {
   playerId: string;
@@ -31,6 +32,7 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
   const [activeTab, setActiveTab] = useState<'matches' | 'h2h' | 'news'>('matches');
   const [activeScenario, setActiveScenario] = useState<ScenarioPreset>('throwing');
   const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const player = players.find(p => p.id === playerId);
@@ -119,22 +121,37 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
               </span>
             </div>
 
-            <button
-              onClick={() => setIsStudioOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 backdrop-blur-md transition-all shadow-md"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>AI Media Studio</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsPhotoModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-900/80 hover:bg-blue-800 text-blue-200 border border-blue-600 backdrop-blur-md transition-all shadow-md"
+                title="Upload photo, run AI face cutout, and style onto standardized uniform"
+              >
+                <Scissors className="w-3.5 h-3.5 text-blue-300" />
+                <span>Upload & Cutout Headshot</span>
+              </button>
+
+              <button
+                onClick={() => setIsStudioOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 backdrop-blur-md transition-all shadow-md"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>AI Media Studio</span>
+              </button>
+            </div>
           </div>
 
           {/* Bottom Hero Foreground: Player Face Photo Styled into Custom Darts Shirt */}
           <div className="absolute bottom-4 left-4 right-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="flex items-center gap-4 sm:gap-6 bg-neutral-950/85 backdrop-blur-md p-4 rounded-2xl border border-neutral-800/90 shadow-2xl max-w-xl">
-              <div className="relative">
-                <BearAvatar player={player} size="xl" />
-                <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded bg-red-600 text-[10px] font-mono font-black text-white shadow">
-                  OCHÈ
+              <div
+                className="relative cursor-pointer group"
+                onClick={() => setIsPhotoModalOpen(true)}
+                title="Click to run AI Face Cutout & style onto standardized uniform"
+              >
+                <BearAvatar player={player} size="xl" className="group-hover:ring-2 group-hover:ring-blue-500 transition-all" />
+                <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded bg-blue-600 text-[10px] font-mono font-black text-white shadow group-hover:bg-blue-500">
+                  EDIT
                 </span>
               </div>
               <div className="min-w-0">
@@ -604,6 +621,25 @@ export const PlayerProfile: React.FC<PlayerProfileProps> = ({
           }
         }}
       />
+
+      {/* AI Face Cutout & Standardized Uniform Studio Modal */}
+      {isPhotoModalOpen && (
+        <PlayerPhotoModal
+          player={player}
+          isOpen={isPhotoModalOpen}
+          onClose={() => setIsPhotoModalOpen(false)}
+          onSave={async (playerIdToSave, photoUrl, shirtColors, scenario) => {
+            if (onUpdatePlayerPhotoAndShirt) {
+              await onUpdatePlayerPhotoAndShirt(
+                playerIdToSave,
+                photoUrl,
+                shirtColors,
+                scenario
+              );
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
